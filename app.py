@@ -19,21 +19,21 @@ PASSWORD = get_secret("PASSWORD")
 st.set_page_config(page_title="Krishna AI", page_icon="🦚", layout="wide")
 
 # =========================
-# 🎨 WOW UI
+# 💎 LIQUID GLASS UI
 # =========================
 st.markdown("""
 <style>
 
 /* 🌌 Background */
 .stApp {
-    background: radial-gradient(circle at top, #0b1a2b, #05080f);
+    background: linear-gradient(135deg,#0b1a2b,#05080f,#0f2a44);
     color: white;
 }
 
 /* Hide header */
 header {visibility:hidden;}
 
-/* Center content */
+/* Center layout */
 .block-container {
     max-width: 700px;
     margin: auto;
@@ -45,8 +45,16 @@ header {visibility:hidden;}
     background: rgba(255,255,255,0.05);
     padding: 25px;
     border-radius: 20px;
-    backdrop-filter: blur(20px);
+    backdrop-filter: blur(25px);
     border: 1px solid rgba(255,255,255,0.1);
+}
+
+/* Inputs */
+input {
+    background: rgba(255,255,255,0.08) !important;
+    color: white !important;
+    border-radius: 10px !important;
+    border: 1px solid rgba(255,255,255,0.2) !important;
 }
 
 /* Labels */
@@ -54,30 +62,29 @@ label {
     color: #FFD700 !important;
 }
 
-/* Inputs */
-input {
-    background-color: rgba(255,255,255,0.1) !important;
-    color: white !important;
-    border-radius: 10px !important;
-    border: 1px solid rgba(255,215,0,0.3) !important;
-}
-
 /* Buttons */
 .stButton button {
     width: 100%;
-    border-radius: 10px;
-    background: linear-gradient(45deg, #FFD700, #C9A227);
+    border-radius: 12px;
+    background: linear-gradient(45deg,#FFD700,#C9A227);
     color: black;
     font-weight: bold;
 }
 
 /* Chat bubbles */
 .stChatMessage {
-    border-radius: 12px;
-    background: rgba(255,255,255,0.06);
+    border-radius: 14px;
+    background: rgba(255,255,255,0.07);
+    backdrop-filter: blur(10px);
 }
 
-/* Mobile fix */
+/* Sidebar */
+section[data-testid="stSidebar"] {
+    background: rgba(255,255,255,0.05);
+    backdrop-filter: blur(20px);
+}
+
+/* Mobile */
 textarea, input {
     font-size: 16px !important;
 }
@@ -87,17 +94,17 @@ textarea, input {
     bottom: 10px;
     width: 100%;
     text-align: center;
-    color: #777;
+    color: #aaa;
 }
 
 </style>
 """, unsafe_allow_html=True)
 
 # =========================
-# 📧 OTP FUNCTION
+# 📧 OTP
 # =========================
 def send_otp(email, otp):
-    msg = MIMEText(f"Your Krishna AI OTP is: {otp}")
+    msg = MIMEText(f"Your OTP is {otp}")
     msg["Subject"] = "Krishna AI Login"
     msg["From"] = EMAIL
     msg["To"] = email
@@ -107,7 +114,7 @@ def send_otp(email, otp):
         server.send_message(msg)
 
 # =========================
-# 🔐 LOGIN PAGE
+# 🔐 LOGIN
 # =========================
 if "user" not in st.session_state:
 
@@ -129,7 +136,7 @@ if "user" not in st.session_state:
         st.session_state.otp = otp
         st.session_state.otp_time = time.time()
         send_otp(email, otp)
-        st.success("OTP sent ✉️")
+        st.success("OTP sent")
 
     entered = st.text_input("🔐 Enter OTP")
 
@@ -192,12 +199,6 @@ with st.sidebar:
         st.rerun()
 
 # =========================
-# 🧠 PROMPT
-# =========================
-def build_prompt():
-    return "You are Krishna, calm, wise, compassionate."
-
-# =========================
 # 💬 CHAT
 # =========================
 messages = chats[st.session_state.chat_id]
@@ -225,7 +226,7 @@ if msg:
     with st.spinner("Krishna is reflecting... 🧘"):
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=[{"role":"system","content":build_prompt()}] + messages
+            messages=[{"role":"system","content":"You are Krishna, wise and calm."}] + messages
         )
 
     reply = response.choices[0].message.content
@@ -243,6 +244,6 @@ if msg:
 # =========================
 st.markdown("""
 <div class="footer">
-✨ Built with devotion by Yuktha 🦚
+✨ Built with clarity by Yuktha 🦚
 </div>
 """, unsafe_allow_html=True)
