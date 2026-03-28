@@ -19,44 +19,69 @@ PASSWORD = get_secret("PASSWORD")
 st.set_page_config(page_title="Krishna AI", page_icon="🦚", layout="wide")
 
 # =========================
-# 🎨 FINAL CLEAN UI
+# 🎨 WOW UI
 # =========================
 st.markdown("""
 <style>
+
+/* 🌌 Background */
 .stApp {
-    background: radial-gradient(circle at top,#0b1a2b,#05080f);
+    background: radial-gradient(circle at top, #0b1a2b, #05080f);
     color: white;
 }
 
+/* Hide header */
 header {visibility:hidden;}
 
-section[data-testid="stSidebar"] {
-    background: rgba(255,255,255,0.05);
-    backdrop-filter: blur(20px);
+/* Center content */
+.block-container {
+    max-width: 700px;
+    margin: auto;
+    padding-top: 50px;
 }
 
-/* chat bubble */
+/* Glass card */
+.glass {
+    background: rgba(255,255,255,0.05);
+    padding: 25px;
+    border-radius: 20px;
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+/* Labels */
+label {
+    color: #FFD700 !important;
+}
+
+/* Inputs */
+input {
+    background-color: rgba(255,255,255,0.1) !important;
+    color: white !important;
+    border-radius: 10px !important;
+    border: 1px solid rgba(255,215,0,0.3) !important;
+}
+
+/* Buttons */
+.stButton button {
+    width: 100%;
+    border-radius: 10px;
+    background: linear-gradient(45deg, #FFD700, #C9A227);
+    color: black;
+    font-weight: bold;
+}
+
+/* Chat bubbles */
 .stChatMessage {
-    border-radius: 14px;
+    border-radius: 12px;
     background: rgba(255,255,255,0.06);
 }
 
-/* buttons */
-button {
-    border-radius: 8px !important;
+/* Mobile fix */
+textarea, input {
+    font-size: 16px !important;
 }
 
-/* delete button */
-.delete-btn button {
-    color: #ff6b6b !important;
-    background: transparent !important;
-}
-
-.delete-btn button:hover {
-    background: rgba(255,0,0,0.1) !important;
-}
-
-/* footer */
 .footer {
     position: fixed;
     bottom: 10px;
@@ -64,11 +89,12 @@ button {
     text-align: center;
     color: #777;
 }
+
 </style>
 """, unsafe_allow_html=True)
 
 # =========================
-# 📧 OTP
+# 📧 OTP FUNCTION
 # =========================
 def send_otp(email, otp):
     msg = MIMEText(f"Your Krishna AI OTP is: {otp}")
@@ -81,13 +107,18 @@ def send_otp(email, otp):
         server.send_message(msg)
 
 # =========================
-# 🔐 LOGIN
+# 🔐 LOGIN PAGE
 # =========================
 if "user" not in st.session_state:
 
-    st.markdown("<h1 style='text-align:center;'>🦚 Krishna AI</h1>", unsafe_allow_html=True)
+    st.markdown("""
+    <div class="glass">
+        <h1 style='text-align:center;color:#FFD700;'>🦚 Krishna AI</h1>
+        <p style='text-align:center;color:#ccc;'>Talk. Reflect. Find clarity.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-    email = st.text_input("Email")
+    email = st.text_input("📧 Email")
 
     if "otp" not in st.session_state:
         st.session_state.otp = None
@@ -98,9 +129,9 @@ if "user" not in st.session_state:
         st.session_state.otp = otp
         st.session_state.otp_time = time.time()
         send_otp(email, otp)
-        st.success("OTP sent")
+        st.success("OTP sent ✉️")
 
-    entered = st.text_input("Enter OTP")
+    entered = st.text_input("🔐 Enter OTP")
 
     if st.button("Login"):
         if not st.session_state.otp_time or time.time() - st.session_state.otp_time > 120:
@@ -113,12 +144,6 @@ if "user" not in st.session_state:
             st.error("Invalid OTP")
 
     st.stop()
-
-# =========================
-# 🧠 MEMORY
-# =========================
-MEMORY_FILE = f"{st.session_state.user}_memory.json"
-memory = json.load(open(MEMORY_FILE)) if os.path.exists(MEMORY_FILE) else []
 
 # =========================
 # 💬 CHAT STORAGE
@@ -140,68 +165,49 @@ with st.sidebar:
     st.markdown("### 🦚 Krishna AI")
 
     if st.button("➕ New Chat"):
-        new_chat = f"Chat {len(chats)+1}"
-        chats[new_chat] = []
-        st.session_state.chat_id = new_chat
+        new = f"Chat {len(chats)+1}"
+        chats[new] = []
+        st.session_state.chat_id = new
         st.rerun()
 
     st.markdown("### Chats")
 
-    for chat in list(chats.keys()):
+    for c in list(chats.keys()):
         col1, col2 = st.columns([5,1])
 
         with col1:
-            if st.button(chat, key=f"open_{chat}"):
-                st.session_state.chat_id = chat
+            if st.button(c, key=f"open_{c}"):
+                st.session_state.chat_id = c
                 st.rerun()
 
         with col2:
-            st.markdown('<div class="delete-btn">', unsafe_allow_html=True)
-            if st.button("✕", key=f"del_{chat}"):
-                del chats[chat]
-                if st.session_state.chat_id == chat:
-                    st.session_state.chat_id = "New Chat"
+            if st.button("✕", key=f"del_{c}"):
+                del chats[c]
+                st.session_state.chat_id = "New Chat"
                 json.dump(chats, open(CHAT_FILE,"w"), indent=2)
                 st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown("---")
 
     if st.button("🚪 Logout"):
         st.session_state.clear()
         st.rerun()
 
 # =========================
-# 🎭 HEADER
-# =========================
-st.markdown(f"""
-<h2>🦚 Krishna AI Companion</h2>
-<p style='color:#aaa;'>Current: {st.session_state.chat_id}</p>
-""", unsafe_allow_html=True)
-
-# =========================
 # 🧠 PROMPT
 # =========================
 def build_prompt():
-    base = """You are Krishna — calm, wise, compassionate.
-Speak gently and clearly. Offer grounded guidance."""
-
-    if memory:
-        base += f"\nUser context: {memory[-5:]}"
-    return base
+    return "You are Krishna, calm, wise, compassionate."
 
 # =========================
 # 💬 CHAT
 # =========================
 messages = chats[st.session_state.chat_id]
 
+st.markdown(f"### 🦚 {st.session_state.chat_id}")
+
 for m in messages:
     with st.chat_message(m["role"]):
         st.write(m["content"])
 
-# =========================
-# 💬 INPUT
-# =========================
 msg = st.chat_input("Ask Krishna...")
 
 if msg:
@@ -225,28 +231,18 @@ if msg:
     reply = response.choices[0].message.content
 
     with st.chat_message("assistant"):
-        placeholder = st.empty()
-        text = ""
-        for c in reply:
-            text += c
-            placeholder.markdown(text)
-            time.sleep(0.004)
+        st.write(reply)
 
     messages.append({"role":"assistant","content":reply})
-
-    # save memory
-    if any(x in msg.lower() for x in ["i am","i feel","i have"]):
-        memory.append(msg)
-        json.dump(memory, open(MEMORY_FILE,"w"), indent=2)
 
     chats[st.session_state.chat_id] = messages
     json.dump(chats, open(CHAT_FILE,"w"), indent=2)
 
 # =========================
-# 👤 FOOTER
+# FOOTER
 # =========================
 st.markdown("""
 <div class="footer">
-✨ Built with clarity by Yuktha 🦚
+✨ Built with devotion by Yuktha 🦚
 </div>
 """, unsafe_allow_html=True)
