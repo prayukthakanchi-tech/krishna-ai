@@ -22,7 +22,7 @@ PASSWORD = get_secret("PASSWORD")
 st.set_page_config(page_title="Krishna AI", page_icon="🦚", layout="wide")
 
 # =========================
-# 🎨 UI + OTP BOX STYLE
+# 🎨 UI FIX
 # =========================
 st.markdown("""
 <style>
@@ -41,27 +41,33 @@ st.markdown("""
     color:#FFD700;
 }
 
-/* OTP BOXES */
-.otp-box input {
-    text-align:center !important;
-    font-size:20px !important;
-    border-radius:10px !important;
+/* INPUT FIX */
+.stTextInput label {
+    color: #FFD700 !important;
+    font-weight: 600;
 }
 
-/* Inputs */
-.stTextInput input {
+.stTextInput > div > div > input {
     color: white !important;
-    background: rgba(0,0,0,0.6) !important;
-    border: 1px solid rgba(255,215,0,0.3) !important;
+    background-color: rgba(0,0,0,0.6) !important;
+    border: 1px solid rgba(255,215,0,0.4) !important;
+    border-radius: 12px !important;
+    padding: 10px !important;
 }
 
-/* Buttons */
+.stTextInput > div > div > input::placeholder {
+    color: rgba(255,255,255,0.8) !important;
+    opacity: 1 !important;
+}
+
+/* BUTTON FIX */
 .stButton>button {
     width: 100%;
     border-radius: 12px;
     background: linear-gradient(135deg,#FFD700,#ffcc00);
     color: black !important;
     font-weight: bold;
+    border: none;
 }
 
 /* Footer */
@@ -75,7 +81,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =========================
-# OTP EMAIL
+# 📩 OTP EMAIL
 # =========================
 def send_otp(receiver, otp):
     msg = MIMEText(f"Your OTP is {otp}")
@@ -88,7 +94,7 @@ def send_otp(receiver, otp):
         server.send_message(msg)
 
 # =========================
-# LOGIN WITH OTP BOXES
+# LOGIN
 # =========================
 if "user" not in st.session_state:
 
@@ -96,15 +102,16 @@ if "user" not in st.session_state:
 
     email = st.text_input("Email", placeholder="Enter your email")
 
-    # Session states
-    if "otp" not in st.session_state:
-        st.session_state.otp = None
     if "otp_sent" not in st.session_state:
         st.session_state.otp_sent = False
+
+    if "otp" not in st.session_state:
+        st.session_state.otp = None
+
     if "timer" not in st.session_state:
         st.session_state.timer = 0
 
-    # SEND OTP
+    # Send OTP
     if not st.session_state.otp_sent:
         if st.button("📩 Send OTP"):
             if email:
@@ -117,22 +124,12 @@ if "user" not in st.session_state:
             else:
                 st.warning("Enter email first")
 
-    # OTP INPUT BOXES
+    # OTP Input
     if st.session_state.otp_sent:
 
-        st.markdown("### Enter OTP")
+        otp_input = st.text_input("OTP", placeholder="Enter OTP")
 
-        cols = st.columns(4)
-        otp_digits = []
-
-        for i in range(4):
-            with cols[i]:
-                digit = st.text_input("", max_chars=1, key=f"otp_{i}")
-                otp_digits.append(digit)
-
-        entered_otp = "".join(otp_digits)
-
-        # TIMER
+        # Timer
         if st.session_state.timer > 0:
             st.info(f"Resend OTP in {st.session_state.timer} sec")
             time.sleep(1)
@@ -146,20 +143,20 @@ if "user" not in st.session_state:
                 send_otp(email, otp)
                 st.success("OTP resent ✨")
 
-        # LOGIN
+        # Login
         if st.button("🔐 Login"):
-            if entered_otp == st.session_state.otp:
+            if otp_input == st.session_state.otp:
                 st.session_state.user = email
                 st.success("Login successful 🎉")
                 st.rerun()
             else:
                 st.error("Invalid OTP")
 
-    st.markdown("<div class='footer'>✨ Built by Yuktha 🦚</div>", unsafe_allow_html=True)
+    st.markdown("<div class='footer'>✨ Built by prayuktha_kanchi 🦚</div>", unsafe_allow_html=True)
     st.stop()
 
 # =========================
-# AFTER LOGIN (SIMPLE CHAT)
+# SIMPLE CHAT
 # =========================
 st.markdown("<div class='header'>🦚 Krishna AI</div>", unsafe_allow_html=True)
 
