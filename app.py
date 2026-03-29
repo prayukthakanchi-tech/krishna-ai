@@ -4,6 +4,9 @@ from email.mime.text import MIMEText
 from groq import Groq
 from dotenv import load_dotenv
 
+# =========================
+# 🔐 LOAD KEYS
+# =========================
 load_dotenv()
 
 def get_secret(key):
@@ -19,18 +22,66 @@ PASSWORD = get_secret("PASSWORD")
 st.set_page_config(page_title="Krishna AI", page_icon="🦚", layout="wide")
 
 # =========================
-# 🎨 FIXED UI (IMPORTANT)
+# 🌌 PARTICLES
+# =========================
+st.markdown("""
+<style>
+canvas { position: fixed; top:0; left:0; z-index:-1; }
+</style>
+
+<script>
+const canvas = document.createElement('canvas');
+document.body.appendChild(canvas);
+const ctx = canvas.getContext('2d');
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+let particles = [];
+for (let i = 0; i < 50; i++) {
+    particles.push({
+        x: Math.random()*canvas.width,
+        y: Math.random()*canvas.height,
+        r: Math.random()*2,
+        d: Math.random()*0.7
+    });
+}
+
+function draw() {
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = "rgba(255,215,0,0.5)";
+    particles.forEach(p=>{
+        ctx.beginPath();
+        ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+        ctx.fill();
+        p.y += p.d;
+        if(p.y > canvas.height) p.y = 0;
+    });
+}
+setInterval(draw,30);
+</script>
+""", unsafe_allow_html=True)
+
+# =========================
+# 🎨 UI FIX (ONLY INPUT FIXED)
 # =========================
 st.markdown("""
 <style>
 
-/* Background */
 .stApp {
     background: radial-gradient(circle at center, #0b2a4a 0%, #02050a 70%);
     color: white;
 }
 
-/* Header */
+section[data-testid="stSidebar"] {
+    width: 260px !important;
+}
+
+.main .block-container {
+    margin-left: 270px;
+    max-width: 900px;
+}
+
 .header {
     text-align:center;
     font-size:32px;
@@ -38,7 +89,7 @@ st.markdown("""
     color:#FFD700;
 }
 
-/* ✅ REAL INPUT FIX */
+/* ✅ FIXED EMAIL + OTP INPUT */
 .stTextInput label {
     color: #FFD700 !important;
     font-weight: 600;
@@ -52,13 +103,12 @@ st.markdown("""
     padding: 10px !important;
 }
 
-/* Placeholder FIX */
 .stTextInput > div > div > input::placeholder {
-    color: rgba(255,255,255,0.8) !important;
+    color: rgba(255,255,255,0.9) !important;
     opacity: 1 !important;
 }
 
-/* Button fix */
+/* BUTTON */
 .stButton>button {
     width: 100%;
     border-radius: 12px;
@@ -67,25 +117,19 @@ st.markdown("""
     font-weight: bold;
 }
 
-/* Chat */
+/* CHAT */
 .user-msg {
     background: rgba(255,255,255,0.05);
     padding:14px;
     border-radius:16px;
     margin:8px 0;
 }
+
 .ai-msg {
     background: linear-gradient(135deg,#1e3a5f,#0b1f33);
     padding:16px;
     border-radius:18px;
     margin:8px 0;
-}
-
-/* Footer */
-.footer {
-    text-align:center;
-    color:#aaa;
-    margin-top:30px;
 }
 
 </style>
@@ -132,13 +176,12 @@ if "user" not in st.session_state:
         else:
             st.error("Invalid OTP")
 
-    st.markdown("<div class='footer'>✨ Built by prayuktha_kanchi 🦚</div>", unsafe_allow_html=True)
     st.stop()
 
 # =========================
-# CHAT UI 
+# CHAT UI
 # =========================
-st.markdown("<div class='header'>🦚 Krishna AI</div>", unsafe_allow_html=True)
+st.markdown(f"<div class='header'>🦚 Krishna AI</div>", unsafe_allow_html=True)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -162,4 +205,4 @@ if msg:
 
     st.rerun()
 
-st.markdown("<div class='footer'>✨ Built by prayuktha 🦚</div>", unsafe_allow_html=True)
+st.markdown("<center>✨ Built by prayuktha_kanchi 🦚</center>", unsafe_allow_html=True)
