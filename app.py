@@ -22,7 +22,14 @@ PASSWORD = get_secret("PASSWORD")
 st.set_page_config(page_title="Krishna AI", page_icon="🦚", layout="wide")
 
 # =========================
-# 🌌 PARTICLE BACKGROUND (SAFE)
+# 📱 FORCE DESKTOP ON MOBILE
+# =========================
+st.markdown("""
+<meta name="viewport" content="width=1024">
+""", unsafe_allow_html=True)
+
+# =========================
+# 🌌 PARTICLE BACKGROUND
 # =========================
 st.markdown("""
 <style>
@@ -76,7 +83,80 @@ setInterval(draw,30);
 """, unsafe_allow_html=True)
 
 # =========================
-# 💾 MEMORY SYSTEM
+# 🎨 UI FIX (KEEP DESKTOP STYLE)
+# =========================
+st.markdown("""
+<style>
+.stApp {
+    background: radial-gradient(circle at center, #0b2a4a 0%, #02050a 70%);
+    color: white;
+}
+
+/* Sidebar FIX */
+section[data-testid="stSidebar"] {
+    width: 260px !important;
+    min-width: 260px !important;
+}
+
+/* Prevent collapse */
+section[data-testid="stSidebar"][aria-expanded="false"] {
+    width: 260px !important;
+}
+
+/* Push content right */
+.main .block-container {
+    margin-left: 270px;
+    max-width: 900px;
+}
+
+/* Chat input fixed bottom */
+.stChatInputContainer {
+    position: fixed;
+    bottom: 10px;
+    left: 270px;
+    right: 20px;
+}
+
+/* Header */
+.header {
+    text-align:center;
+    font-size:32px;
+    font-weight:bold;
+    color:#FFD700;
+}
+
+/* Chat bubbles */
+.user-msg {
+    background: rgba(255,255,255,0.05);
+    padding:14px;
+    border-radius:16px;
+    margin:8px 0;
+}
+
+.ai-msg {
+    background: linear-gradient(135deg,#1e3a5f,#0b1f33);
+    padding:16px;
+    border-radius:18px;
+    margin:8px 0;
+    border:1px solid rgba(255,215,0,0.2);
+}
+
+/* Inputs */
+textarea, input {
+    border-radius:14px !important;
+}
+
+/* Footer */
+.footer {
+    text-align:center;
+    color:#aaa;
+    margin-top:20px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# =========================
+# 💾 MEMORY
 # =========================
 MEMORY_FILE = "memory.json"
 
@@ -91,63 +171,10 @@ def update_memory(text):
     if "my name is" in t:
         memory["name"] = text.split("is")[-1].strip()
 
-    if "i feel" in t:
-        memory["feeling"] = text
-
-    if "i like" in t:
-        memory["likes"] = text
-
     json.dump(memory, open(MEMORY_FILE,"w"))
 
 def memory_context():
-    if not memory:
-        return ""
-    return f"User info: {memory}"
-
-# =========================
-# 🎨 YOUR EXISTING UI (UNCHANGED)
-# =========================
-st.markdown("""
-<style>
-.stApp {
-    background: radial-gradient(circle at center, #0b2a4a 0%, #02050a 70%);
-    color: white;
-}
-.block-container {max-width:900px;margin:auto;}
-.header {
-    text-align:center;
-    font-size:32px;
-    font-weight:bold;
-    color:#FFD700;
-}
-.user-msg {
-    background: rgba(255,255,255,0.05);
-    padding:14px;
-    border-radius:16px;
-    margin:8px 0;
-}
-.ai-msg {
-    background: linear-gradient(135deg,#1e3a5f,#0b1f33);
-    padding:16px;
-    border-radius:18px;
-    margin:8px 0;
-    border:1px solid rgba(255,215,0,0.2);
-}
-textarea {
-    background: rgba(0,0,0,0.4) !important;
-    border-radius:14px !important;
-    color:white !important;
-}
-section[data-testid="stSidebar"] {
-    background: rgba(0,0,0,0.6);
-}
-.footer {
-    text-align:center;
-    color:#aaa;
-    margin-top:20px;
-}
-</style>
-""", unsafe_allow_html=True)
+    return f"User info: {memory}" if memory else ""
 
 # =========================
 # 📩 OTP
@@ -165,25 +192,7 @@ def send_otp(receiver, otp):
 # =========================
 # LOGIN
 # =========================
-LOGIN_FILE = "login.json"
-
-def save_login(user):
-    json.dump({"user":user}, open(LOGIN_FILE,"w"))
-
-def load_login():
-    if os.path.exists(LOGIN_FILE):
-        return json.load(open(LOGIN_FILE)).get("user")
-
-def clear_login():
-    if os.path.exists(LOGIN_FILE):
-        os.remove(LOGIN_FILE)
-
 if "user" not in st.session_state:
-
-    saved = load_login()
-    if saved:
-        st.session_state.user = saved
-        st.rerun()
 
     st.markdown("<div class='header'>🦚 Krishna AI</div>", unsafe_allow_html=True)
 
@@ -203,7 +212,6 @@ if "user" not in st.session_state:
     if st.button("Login"):
         if entered == st.session_state.otp:
             st.session_state.user = email
-            save_login(email)
             st.session_state.chat_id = "Chat 1"
             st.rerun()
         else:
@@ -249,22 +257,18 @@ with st.sidebar:
     st.markdown("---")
 
     if st.button("Logout"):
-        clear_login()
         st.session_state.clear()
         st.rerun()
 
 # =========================
-# 🧠 AI PROMPT (WITH MEMORY)
+# AI PROMPT
 # =========================
 SYSTEM_PROMPT = f"""
 You are Krishna — speak like a real human friend.
 
 {memory_context()}
 
-- Short replies (2–4 lines)
-- Natural tone
-- Use emojis 😊
-- Ask follow-up sometimes
+Short replies, friendly tone 😊
 """
 
 # =========================
@@ -306,4 +310,4 @@ if msg:
 # =========================
 # FOOTER
 # =========================
-st.markdown("<div class='footer'>✨ Built by Prayuktha_kanchi 🦚</div>", unsafe_allow_html=True)
+st.markdown("<div class='footer'>✨ Built by prayuktha_kanchi 🦚</div>", unsafe_allow_html=True)
