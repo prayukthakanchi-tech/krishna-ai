@@ -63,7 +63,7 @@ setInterval(draw,30);
 """, unsafe_allow_html=True)
 
 # =========================
-# 🎨 UI (FIXED INPUT VISIBILITY)
+# 🎨 UI FIXED
 # =========================
 st.markdown("""
 <style>
@@ -71,19 +71,24 @@ st.markdown("""
     background: radial-gradient(circle at center, #0b2a4a 0%, #02050a 70%);
     color: white;
 }
+
 section[data-testid="stSidebar"] {
     width: 260px !important;
 }
+
 .main .block-container {
     margin-left: 270px;
     max-width: 900px;
 }
+
 .header {
     text-align:center;
     font-size:32px;
     font-weight:bold;
     color:#FFD700;
 }
+
+/* INPUT FIX */
 input {
     color: white !important;
     background: rgba(0,0,0,0.5) !important;
@@ -92,13 +97,18 @@ input {
 input::placeholder {
     color: rgba(255,255,255,0.8) !important;
 }
-label {
-    color: #FFD700 !important;
-}
+
+/* BUTTON FIX */
 .stButton>button {
     width: 100%;
-    border-radius: 10px;
+    border-radius: 12px;
+    background: linear-gradient(135deg,#FFD700,#ffcc00);
+    color: black !important;
+    font-weight: bold;
+    border: none;
 }
+
+/* CHAT */
 .user-msg {
     background: rgba(255,255,255,0.05);
     padding:14px;
@@ -111,6 +121,7 @@ label {
     border-radius:18px;
     margin:8px 0;
 }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -176,7 +187,6 @@ if "user" not in st.session_state:
 # =========================
 USER = st.session_state.user
 CHAT_FILE = f"{USER}_chats.json"
-
 chats = json.load(open(CHAT_FILE)) if os.path.exists(CHAT_FILE) else {}
 
 if "chat_id" not in st.session_state:
@@ -186,7 +196,7 @@ if st.session_state.chat_id not in chats:
     chats[st.session_state.chat_id] = []
 
 # =========================
-# 🧠 AUTO TITLE FUNCTION
+# 🧠 AUTO TITLE
 # =========================
 def generate_title(text):
     try:
@@ -195,7 +205,7 @@ def generate_title(text):
             messages=[{"role":"user","content":f"Give short 3 word title: {text}"}],
             max_tokens=10
         )
-        return res.choices[0].message.content.strip().replace('"','')
+        return res.choices[0].message.content.strip()
     except:
         return "New Chat"
 
@@ -214,15 +224,15 @@ with st.sidebar:
     st.markdown("---")
 
     for c in list(chats.keys()):
-        col1, col2 = st.columns([4,1])
+        cols = st.columns([0.8, 0.2])
 
-        with col1:
-            if st.button(c, key=f"chat_{c}"):
+        with cols[0]:
+            if st.button(c, key=f"chat_{c}", use_container_width=True):
                 st.session_state.chat_id = c
                 st.rerun()
 
-        with col2:
-            if st.button("❌", key=f"del_{c}"):
+        with cols[1]:
+            if st.button("❌", key=f"del_{c}", use_container_width=True):
                 del chats[c]
 
                 if chats:
@@ -258,7 +268,6 @@ msg = st.chat_input("Ask Krishna...")
 if msg:
     update_memory(msg)
 
-    # Auto title on first message
     if st.session_state.chat_id == "New Chat" and len(messages) == 0:
         title = generate_title(msg)
         chats[title] = chats.pop("New Chat")
@@ -284,4 +293,4 @@ if msg:
 # =========================
 # FOOTER
 # =========================
-st.markdown("<center>✨ Built by Prayuktha_kanchi 🦚</center>", unsafe_allow_html=True)
+st.markdown("<center>✨ Built by prayuktha_kanchi 🦚</center>", unsafe_allow_html=True)
