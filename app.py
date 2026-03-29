@@ -132,7 +132,7 @@ if "user" not in st.session_state:
         else:
             st.error("Invalid OTP")
 
-    st.markdown("<div class='footer'>✨ Built by prayuktha+kanchi 🦚</div>", unsafe_allow_html=True)
+    st.markdown("<div class='footer'>✨ Built by prayuktha_kanchi 🦚</div>", unsafe_allow_html=True)
     st.stop()
 
 # =========================
