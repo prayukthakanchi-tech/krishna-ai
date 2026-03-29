@@ -54,8 +54,6 @@ function draw() {
         ctx.beginPath();
         ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
         ctx.fill();
-    });
-    particles.forEach(p=>{
         p.y += p.d;
         if(p.y > canvas.height) p.y = 0;
     });
@@ -65,100 +63,54 @@ setInterval(draw,30);
 """, unsafe_allow_html=True)
 
 # =========================
-# 🎨 POLISHED UI (FIXED INPUT VISIBILITY)
+# 🎨 UI (FIXED INPUT VISIBILITY)
 # =========================
 st.markdown("""
 <style>
-
-/* Background */
 .stApp {
     background: radial-gradient(circle at center, #0b2a4a 0%, #02050a 70%);
     color: white;
 }
-
-/* Sidebar */
 section[data-testid="stSidebar"] {
     width: 260px !important;
 }
-
-/* Content */
 .main .block-container {
     margin-left: 270px;
     max-width: 900px;
 }
-
-/* Header */
 .header {
     text-align:center;
     font-size:32px;
     font-weight:bold;
     color:#FFD700;
 }
-
-/* Inputs FIX */
 input {
     color: white !important;
     background: rgba(0,0,0,0.5) !important;
     border-radius: 12px !important;
-    padding: 12px !important;
 }
-
-/* Placeholder FIX */
 input::placeholder {
     color: rgba(255,255,255,0.8) !important;
-    opacity: 1 !important;
 }
-
-/* Labels */
 label {
     color: #FFD700 !important;
-    font-weight: 500;
 }
-
-/* Buttons */
 .stButton>button {
     width: 100%;
-    border-radius: 12px;
-    background: linear-gradient(135deg,#FFD700,#ffcc00);
-    color: black;
-    font-weight: bold;
-    transition: 0.3s;
+    border-radius: 10px;
 }
-
-.stButton>button:hover {
-    transform: scale(1.03);
-}
-
-/* Chat bubbles */
 .user-msg {
     background: rgba(255,255,255,0.05);
     padding:14px;
     border-radius:16px;
     margin:8px 0;
 }
-
 .ai-msg {
     background: linear-gradient(135deg,#1e3a5f,#0b1f33);
     padding:16px;
     border-radius:18px;
     margin:8px 0;
-    border:1px solid rgba(255,215,0,0.2);
 }
-
-/* Chat input */
-textarea {
-    background: rgba(0,0,0,0.5) !important;
-    color: white !important;
-    border-radius: 14px !important;
-}
-
-/* Footer */
-.footer {
-    text-align:center;
-    color:#aaa;
-    margin-top:20px;
-}
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -166,15 +118,10 @@ textarea {
 # 💾 MEMORY
 # =========================
 MEMORY_FILE = "memory.json"
-
-if os.path.exists(MEMORY_FILE):
-    memory = json.load(open(MEMORY_FILE))
-else:
-    memory = {}
+memory = json.load(open(MEMORY_FILE)) if os.path.exists(MEMORY_FILE) else {}
 
 def update_memory(text):
-    t = text.lower()
-    if "my name is" in t:
+    if "my name is" in text.lower():
         memory["name"] = text.split("is")[-1].strip()
     json.dump(memory, open(MEMORY_FILE,"w"))
 
@@ -217,7 +164,7 @@ if "user" not in st.session_state:
     if st.button("Login"):
         if entered == st.session_state.otp:
             st.session_state.user = email
-            st.session_state.chat_id = "Chat 1"
+            st.session_state.chat_id = "New Chat"
             st.rerun()
         else:
             st.error("Invalid OTP")
@@ -230,16 +177,27 @@ if "user" not in st.session_state:
 USER = st.session_state.user
 CHAT_FILE = f"{USER}_chats.json"
 
-if os.path.exists(CHAT_FILE):
-    chats = json.load(open(CHAT_FILE))
-else:
-    chats = {}
+chats = json.load(open(CHAT_FILE)) if os.path.exists(CHAT_FILE) else {}
 
 if "chat_id" not in st.session_state:
-    st.session_state.chat_id = "Chat 1"
+    st.session_state.chat_id = "New Chat"
 
 if st.session_state.chat_id not in chats:
     chats[st.session_state.chat_id] = []
+
+# =========================
+# 🧠 AUTO TITLE FUNCTION
+# =========================
+def generate_title(text):
+    try:
+        res = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role":"user","content":f"Give short 3 word title: {text}"}],
+            max_tokens=10
+        )
+        return res.choices[0].message.content.strip().replace('"','')
+    except:
+        return "New Chat"
 
 # =========================
 # SIDEBAR
@@ -249,30 +207,38 @@ with st.sidebar:
     st.caption(USER)
 
     if st.button("➕ New Chat"):
-        new = f"Chat {len(chats)+1}"
-        chats[new] = []
-        st.session_state.chat_id = new
+        st.session_state.chat_id = "New Chat"
+        chats["New Chat"] = []
         st.rerun()
 
-    for c in chats.keys():
-        if st.button(c):
-            st.session_state.chat_id = c
-            st.rerun()
+    st.markdown("---")
+
+    for c in list(chats.keys()):
+        col1, col2 = st.columns([4,1])
+
+        with col1:
+            if st.button(c, key=f"chat_{c}"):
+                st.session_state.chat_id = c
+                st.rerun()
+
+        with col2:
+            if st.button("❌", key=f"del_{c}"):
+                del chats[c]
+
+                if chats:
+                    st.session_state.chat_id = list(chats.keys())[0]
+                else:
+                    chats["New Chat"] = []
+                    st.session_state.chat_id = "New Chat"
+
+                json.dump(chats, open(CHAT_FILE,"w"))
+                st.rerun()
 
     st.markdown("---")
 
     if st.button("Logout"):
         st.session_state.clear()
         st.rerun()
-
-# =========================
-# AI PROMPT
-# =========================
-SYSTEM_PROMPT = f"""
-You are Krishna — friendly, human-like.
-
-{memory_context()}
-"""
 
 # =========================
 # CHAT UI
@@ -292,20 +258,25 @@ msg = st.chat_input("Ask Krishna...")
 if msg:
     update_memory(msg)
 
+    # Auto title on first message
+    if st.session_state.chat_id == "New Chat" and len(messages) == 0:
+        title = generate_title(msg)
+        chats[title] = chats.pop("New Chat")
+        st.session_state.chat_id = title
+
+    messages = chats[st.session_state.chat_id]
     messages.append({"role":"user","content":msg})
 
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
-        messages=[{"role":"system","content":SYSTEM_PROMPT}] + messages,
-        temperature=1,
+        messages=[{"role":"system","content":memory_context()}] + messages,
         max_tokens=120
     )
 
     reply = response.choices[0].message.content
-
     messages.append({"role":"assistant","content":reply})
-    chats[st.session_state.chat_id] = messages
 
+    chats[st.session_state.chat_id] = messages
     json.dump(chats, open(CHAT_FILE,"w"))
 
     st.rerun()
@@ -313,4 +284,4 @@ if msg:
 # =========================
 # FOOTER
 # =========================
-st.markdown("<div class='footer'>✨ Built by Prayuktha_kanchi 🦚</div>", unsafe_allow_html=True)
+st.markdown("<center>✨ Built by Prayuktha_kanchi 🦚</center>", unsafe_allow_html=True)
