@@ -22,23 +22,11 @@ PASSWORD = get_secret("PASSWORD")
 st.set_page_config(page_title="Krishna AI", page_icon="🦚", layout="wide")
 
 # =========================
-# 📱 FORCE DESKTOP ON MOBILE
-# =========================
-st.markdown("""
-<meta name="viewport" content="width=1024">
-""", unsafe_allow_html=True)
-
-# =========================
-# 🌌 PARTICLE BACKGROUND
+# 🌌 PARTICLES
 # =========================
 st.markdown("""
 <style>
-canvas {
-    position: fixed;
-    top:0;
-    left:0;
-    z-index:-1;
-}
+canvas { position: fixed; top:0; left:0; z-index:-1; }
 </style>
 
 <script>
@@ -50,13 +38,12 @@ canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
 let particles = [];
-
-for (let i = 0; i < 60; i++) {
+for (let i = 0; i < 50; i++) {
     particles.push({
         x: Math.random()*canvas.width,
         y: Math.random()*canvas.height,
         r: Math.random()*2,
-        d: Math.random()*1
+        d: Math.random()*0.7
     });
 }
 
@@ -68,53 +55,36 @@ function draw() {
         ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
         ctx.fill();
     });
-    update();
-}
-
-function update() {
     particles.forEach(p=>{
         p.y += p.d;
         if(p.y > canvas.height) p.y = 0;
     });
 }
-
 setInterval(draw,30);
 </script>
 """, unsafe_allow_html=True)
 
 # =========================
-# 🎨 UI FIX (KEEP DESKTOP STYLE)
+# 🎨 POLISHED UI (FIXED INPUT VISIBILITY)
 # =========================
 st.markdown("""
 <style>
+
+/* Background */
 .stApp {
     background: radial-gradient(circle at center, #0b2a4a 0%, #02050a 70%);
     color: white;
 }
 
-/* Sidebar FIX */
+/* Sidebar */
 section[data-testid="stSidebar"] {
     width: 260px !important;
-    min-width: 260px !important;
 }
 
-/* Prevent collapse */
-section[data-testid="stSidebar"][aria-expanded="false"] {
-    width: 260px !important;
-}
-
-/* Push content right */
+/* Content */
 .main .block-container {
     margin-left: 270px;
     max-width: 900px;
-}
-
-/* Chat input fixed bottom */
-.stChatInputContainer {
-    position: fixed;
-    bottom: 10px;
-    left: 270px;
-    right: 20px;
 }
 
 /* Header */
@@ -123,6 +93,40 @@ section[data-testid="stSidebar"][aria-expanded="false"] {
     font-size:32px;
     font-weight:bold;
     color:#FFD700;
+}
+
+/* Inputs FIX */
+input {
+    color: white !important;
+    background: rgba(0,0,0,0.5) !important;
+    border-radius: 12px !important;
+    padding: 12px !important;
+}
+
+/* Placeholder FIX */
+input::placeholder {
+    color: rgba(255,255,255,0.8) !important;
+    opacity: 1 !important;
+}
+
+/* Labels */
+label {
+    color: #FFD700 !important;
+    font-weight: 500;
+}
+
+/* Buttons */
+.stButton>button {
+    width: 100%;
+    border-radius: 12px;
+    background: linear-gradient(135deg,#FFD700,#ffcc00);
+    color: black;
+    font-weight: bold;
+    transition: 0.3s;
+}
+
+.stButton>button:hover {
+    transform: scale(1.03);
 }
 
 /* Chat bubbles */
@@ -141,9 +145,11 @@ section[data-testid="stSidebar"][aria-expanded="false"] {
     border:1px solid rgba(255,215,0,0.2);
 }
 
-/* Inputs */
-textarea, input {
-    border-radius:14px !important;
+/* Chat input */
+textarea {
+    background: rgba(0,0,0,0.5) !important;
+    color: white !important;
+    border-radius: 14px !important;
 }
 
 /* Footer */
@@ -152,6 +158,7 @@ textarea, input {
     color:#aaa;
     margin-top:20px;
 }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -167,10 +174,8 @@ else:
 
 def update_memory(text):
     t = text.lower()
-
     if "my name is" in t:
         memory["name"] = text.split("is")[-1].strip()
-
     json.dump(memory, open(MEMORY_FILE,"w"))
 
 def memory_context():
@@ -196,7 +201,7 @@ if "user" not in st.session_state:
 
     st.markdown("<div class='header'>🦚 Krishna AI</div>", unsafe_allow_html=True)
 
-    email = st.text_input("Enter Email")
+    email = st.text_input("Email", placeholder="Enter your email")
 
     if "otp" not in st.session_state:
         st.session_state.otp = None
@@ -207,7 +212,7 @@ if "user" not in st.session_state:
         send_otp(email, otp)
         st.success("OTP sent ✨")
 
-    entered = st.text_input("Enter OTP")
+    entered = st.text_input("OTP", placeholder="Enter OTP")
 
     if st.button("Login"):
         if entered == st.session_state.otp:
@@ -264,11 +269,9 @@ with st.sidebar:
 # AI PROMPT
 # =========================
 SYSTEM_PROMPT = f"""
-You are Krishna — speak like a real human friend.
+You are Krishna — friendly, human-like.
 
 {memory_context()}
-
-Short replies, friendly tone 😊
 """
 
 # =========================
@@ -310,4 +313,4 @@ if msg:
 # =========================
 # FOOTER
 # =========================
-st.markdown("<div class='footer'>✨ Built by prayuktha_kanchi 🦚</div>", unsafe_allow_html=True)
+st.markdown("<div class='footer'>✨ Built by Prayuktha_kanchi 🦚</div>", unsafe_allow_html=True)
