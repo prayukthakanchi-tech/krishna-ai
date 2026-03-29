@@ -63,24 +63,29 @@ setInterval(draw,30);
 """, unsafe_allow_html=True)
 
 # =========================
-# 🎨 UI FIXED
+# 🎨 UI FIX (INPUT + BUTTON PERFECT)
 # =========================
 st.markdown("""
 <style>
+
+/* Background */
 .stApp {
     background: radial-gradient(circle at center, #0b2a4a 0%, #02050a 70%);
     color: white;
 }
 
+/* Sidebar */
 section[data-testid="stSidebar"] {
     width: 260px !important;
 }
 
+/* Layout */
 .main .block-container {
     margin-left: 270px;
     max-width: 900px;
 }
 
+/* Header */
 .header {
     text-align:center;
     font-size:32px;
@@ -89,13 +94,19 @@ section[data-testid="stSidebar"] {
 }
 
 /* INPUT FIX */
-input {
+.stTextInput label {
+    color: #FFD700 !important;
+    font-weight: 600;
+}
+.stTextInput input {
     color: white !important;
-    background: rgba(0,0,0,0.5) !important;
+    background-color: rgba(0,0,0,0.6) !important;
+    border: 1px solid rgba(255,215,0,0.3) !important;
     border-radius: 12px !important;
 }
-input::placeholder {
-    color: rgba(255,255,255,0.8) !important;
+.stTextInput input::placeholder {
+    color: rgba(255,255,255,0.7) !important;
+    opacity: 1 !important;
 }
 
 /* BUTTON FIX */
@@ -108,7 +119,7 @@ input::placeholder {
     border: none;
 }
 
-/* CHAT */
+/* Chat */
 .user-msg {
     background: rgba(255,255,255,0.05);
     padding:14px;
@@ -120,6 +131,13 @@ input::placeholder {
     padding:16px;
     border-radius:18px;
     margin:8px 0;
+}
+
+/* Footer */
+.footer {
+    text-align:center;
+    color:#aaa;
+    margin-top:30px;
 }
 
 </style>
@@ -160,6 +178,7 @@ if "user" not in st.session_state:
     st.markdown("<div class='header'>🦚 Krishna AI</div>", unsafe_allow_html=True)
 
     email = st.text_input("Email", placeholder="Enter your email")
+    entered = st.text_input("OTP", placeholder="Enter OTP")
 
     if "otp" not in st.session_state:
         st.session_state.otp = None
@@ -170,8 +189,6 @@ if "user" not in st.session_state:
         send_otp(email, otp)
         st.success("OTP sent ✨")
 
-    entered = st.text_input("OTP", placeholder="Enter OTP")
-
     if st.button("Login"):
         if entered == st.session_state.otp:
             st.session_state.user = email
@@ -180,6 +197,7 @@ if "user" not in st.session_state:
         else:
             st.error("Invalid OTP")
 
+    st.markdown("<div class='footer'>✨ Built by Yuktha 🦚</div>", unsafe_allow_html=True)
     st.stop()
 
 # =========================
@@ -196,7 +214,7 @@ if st.session_state.chat_id not in chats:
     chats[st.session_state.chat_id] = []
 
 # =========================
-# 🧠 AUTO TITLE
+# AUTO TITLE
 # =========================
 def generate_title(text):
     try:
@@ -293,4 +311,4 @@ if msg:
 # =========================
 # FOOTER
 # =========================
-st.markdown("<center>✨ Built by prayuktha_kanchi 🦚</center>", unsafe_allow_html=True)
+st.markdown("<div class='footer'>✨ Built by prayuktha_kanchi 🦚</div>", unsafe_allow_html=True)
