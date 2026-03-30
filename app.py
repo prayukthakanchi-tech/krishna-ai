@@ -150,6 +150,23 @@ def memory_context():
     return f"User info: {memory}" if memory else ""
 
 # =========================
+# 🧠 EMOTION DETECTION
+# =========================
+def detect_emotion(text):
+    text = text.lower()
+
+    if any(w in text for w in ["sad","down","hurt"]):
+        return "sad"
+    if any(w in text for w in ["anxious","worried","fear"]):
+        return "anxious"
+    if any(w in text for w in ["confused","lost"]):
+        return "confused"
+    if any(w in text for w in ["stress","pressure"]):
+        return "stressed"
+
+    return "neutral"
+
+# =========================
 # 📩 OTP
 # =========================
 def send_otp(receiver, otp):
@@ -277,17 +294,35 @@ msg = st.chat_input("Ask Krishna...")
 
 if msg:
     update_memory(msg)
-
-    if st.session_state.chat_id == "New Chat" and len(messages) == 0:
-        title = generate_title(msg)
-        chats[title] = chats.pop("New Chat")
-        st.session_state.chat_id = title
+    emotion = detect_emotion(msg)
 
     messages.append({"role":"user","content":msg})
 
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
-        messages=[{"role":"system","content":memory_context()}] + messages,
+        messages=[
+            {
+                "role": "system",
+                "content": f"""
+You are Krishna, speaking like a calm, understanding friend.
+
+Rules:
+- Never say you are an AI
+- Keep responses short (2–5 lines)
+- Speak naturally like a human
+
+Behavior:
+- sad → comforting
+- anxious → calming
+- confused → simple clarity
+
+User context:
+{memory_context()}
+Emotion:
+{emotion}
+"""
+            }
+        ] + messages,
         max_tokens=120
     )
 
@@ -298,6 +333,7 @@ if msg:
     json.dump(chats, open(CHAT_FILE,"w"))
 
     st.rerun()
+
 
 # =========================
 # FOOTER
