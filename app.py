@@ -105,9 +105,8 @@ def get_groq_client():
     return Groq(api_key=GROQ_API_KEY)
 
 
-@st.cache_resource
 def get_krishna_icon() -> str:
-    """Load Krishna icon as base64 once per server start."""
+    """Load Krishna icon as base64 from disk."""
     try:
         with open("static/krishna_icon.png", "rb") as f:
             data = base64.b64encode(f.read()).decode()
