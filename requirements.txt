@@ -1,3 +1,3 @@
-streamlit
-groq
-python-dotenv
+streamlit>=1.35.0
+groq>=0.9.0
+python-dotenv>=1.0.1
