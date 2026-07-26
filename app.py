@@ -803,7 +803,7 @@ if "user" not in st.session_state:
         background: #05080f !important;
     }
 
-    /* PHASE 1 REDO: PREMIUM GLASS AUTHENTICATION CARD CONTAINER */
+    /* PHASE 1 & 2 ENHANCED: GLASS REALISM & CUSTOM INPUT STYLING */
     div[data-testid="stColumn"]:nth-child(2) > div:first-child,
     div[data-testid="column"]:nth-child(2) > div:first-child,
     div.stColumn:nth-child(2) > div:first-child {
@@ -812,16 +812,18 @@ if "user" not in st.session_state:
         width: 100% !important;
         max-width: 500px !important;
         margin: 0 auto !important;
-        background: rgba(18, 14, 32, 0.58) !important;
-        border: 1.5px solid rgba(167, 139, 250, 0.42) !important;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(18, 14, 32, 0.55) 100%) !important;
+        border: 1px solid rgba(255, 255, 255, 0.22) !important;
+        border-top: 1.5px solid rgba(255, 255, 255, 0.4) !important;
         border-radius: 24px !important;
-        padding: 34px 44px 28px !important;
-        backdrop-filter: blur(35px) saturate(190%) !important;
-        -webkit-backdrop-filter: blur(35px) saturate(190%) !important;
+        padding: 36px 44px 30px !important;
+        backdrop-filter: blur(35px) saturate(200%) !important;
+        -webkit-backdrop-filter: blur(35px) saturate(200%) !important;
         box-shadow:
-            0 25px 65px rgba(0, 0, 0, 0.8),
+            0 25px 65px rgba(0, 0, 0, 0.75),
             0 0 60px rgba(167, 139, 250, 0.3),
-            inset 0 1.5px 1px rgba(255, 255, 255, 0.2) !important;
+            inset 0 1.5px 1px rgba(255, 255, 255, 0.3),
+            inset 0 -1px 1px rgba(255, 255, 255, 0.05) !important;
         animation: cardFadeIn 0.5s ease-out !important;
     }
 
@@ -887,8 +889,8 @@ if "user" not in st.session_state:
     .login-field-label {
         color: #e4e4e7 !important;
         font-size: 13px !important;
-        font-weight: 500 !important;
-        margin: 18px 0 4px !important;
+        font-weight: 600 !important;
+        margin: 20px 0 8px !important;
     }
 
     /* Force all inner Streamlit input wrappers to be transparent */
@@ -901,11 +903,8 @@ if "user" not in st.session_state:
         box-shadow: none !important;
     }
 
-    /* Clean Underline Input Style matching reference screenshot */
+    /* Phase 2: Rounded Glass Input Field (52px height) */
     div[data-testid="stTextInput"] input {
-        background: transparent !important;
-        border: none !important;
-        border-bottom: 1.5px solid rgba(255, 255, 255, 0.25) !important;
         border-radius: 0px !important;
         color: #ffffff !important;
         height: 42px !important;
