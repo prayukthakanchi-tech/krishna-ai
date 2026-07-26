@@ -803,25 +803,45 @@ if "user" not in st.session_state:
         background: #05080f !important;
     }
 
-    /* Bulletproof Glassmorphism Authentication Card Target (Streamlit 1.35+) */
+    /* PHASE 1: GLASS AUTHENTICATION CARD CONTAINER SPECIFICATION */
     div[data-testid="stColumn"]:nth-child(2) > div:first-child,
     div[data-testid="column"]:nth-child(2) > div:first-child,
     div.stColumn:nth-child(2) > div:first-child {
         position: relative !important;
         z-index: 10 !important;
-        max-width: 440px !important;
+        width: 100% !important;
+        max-width: 480px !important;
         margin: 0 auto !important;
-        background: rgba(16, 12, 28, 0.75) !important;
-        border: 1px solid rgba(167, 139, 250, 0.35) !important;
-        border-radius: 22px !important;
-        padding: 36px 38px 32px !important;
-        backdrop-filter: blur(30px) saturate(180%) !important;
-        -webkit-backdrop-filter: blur(30px) saturate(180%) !important;
+        background: rgba(18, 14, 32, 0.75) !important;
+        border: 1px solid rgba(255, 255, 255, 0.15) !important;
+        border-radius: 24px !important;
+        padding: 48px !important;
+        backdrop-filter: blur(35px) saturate(180%) !important;
+        -webkit-backdrop-filter: blur(35px) saturate(180%) !important;
         box-shadow:
             0 30px 70px rgba(0, 0, 0, 0.8),
-            0 0 50px rgba(124, 58, 237, 0.25),
+            0 0 55px rgba(124, 58, 237, 0.25),
             inset 0 1px 1px rgba(255, 255, 255, 0.15) !important;
         animation: cardFadeIn 0.5s ease-out !important;
+    }
+
+    /* Tablet & Mobile Responsiveness */
+    @media (max-width: 768px) {
+        div[data-testid="stColumn"]:nth-child(2) > div:first-child,
+        div[data-testid="column"]:nth-child(2) > div:first-child,
+        div.stColumn:nth-child(2) > div:first-child {
+            max-width: 420px !important;
+            padding: 36px 28px !important;
+        }
+    }
+
+    @media (max-width: 480px) {
+        div[data-testid="stColumn"]:nth-child(2) > div:first-child,
+        div[data-testid="column"]:nth-child(2) > div:first-child,
+        div.stColumn:nth-child(2) > div:first-child {
+            width: calc(100% - 32px) !important;
+            padding: 28px 20px !important;
+        }
     }
 
     @keyframes cardFadeIn {
