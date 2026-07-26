@@ -1061,7 +1061,13 @@ if "user" not in st.session_state:
                                   label_visibility="collapsed", key="otp_input")
         st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
+        # ── Resend Status Row (Directly below 6-digit code box) ──
+        st.markdown(
+            f"<div style='text-align:right;margin-top:-10px;margin-bottom:18px;font-size:12px;color:rgba(255,255,255,0.45);'>"
+            f"Didn't receive the code? <span style='color:#a78bfa;font-weight:600;cursor:pointer;'>Resend OTP</span>"
+            f"</div>",
+            unsafe_allow_html=True
+        )
 
         # ── Primary Login Button ──
         if st.button("Login to Krishna AI  →", use_container_width=True, type="primary"):
@@ -1080,14 +1086,6 @@ if "user" not in st.session_state:
         st.markdown(
             f"<div style='text-align:center;margin-top:22px;font-size:14px;color:#a1a1aa;font-weight:400;letter-spacing:-0.2px;'>"
             f"Don't have an account? <span class='register-link'>Register</span>"
-            f"</div>",
-            unsafe_allow_html=True
-        )
-
-        # ── Resend Status Row ──
-        st.markdown(
-            f"<div style='text-align:center;margin-top:14px;font-size:12px;color:rgba(255,255,255,0.45);'>"
-            f"Didn't receive the code? <span style='color:#a78bfa;font-weight:600;cursor:pointer;'>Resend OTP</span>"
             f"</div>",
             unsafe_allow_html=True
         )
