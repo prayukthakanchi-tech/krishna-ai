@@ -803,7 +803,7 @@ if "user" not in st.session_state:
         background: #05080f !important;
     }
 
-    /* PHASE 1 & 2 ENHANCED: GLASS REALISM & CUSTOM INPUT STYLING */
+    /* PREMIUM GLASSMORPHISM AUTHENTICATION CARD */
     div[data-testid="stColumn"]:nth-child(2) > div:first-child,
     div[data-testid="column"]:nth-child(2) > div:first-child,
     div.stColumn:nth-child(2) > div:first-child {
@@ -890,7 +890,7 @@ if "user" not in st.session_state:
         color: #e4e4e7 !important;
         font-size: 13px !important;
         font-weight: 600 !important;
-        margin: 20px 0 8px !important;
+        margin: 22px 0 8px !important;
     }
 
     /* Force all inner Streamlit input wrappers to be transparent */
@@ -903,54 +903,83 @@ if "user" not in st.session_state:
         box-shadow: none !important;
     }
 
-    /* Phase 2: Rounded Glass Input Field (52px height) */
+    /* Clean Underline Input Style with embedded icon space */
     div[data-testid="stTextInput"] input {
+        background: transparent !important;
+        border: none !important;
+        border-bottom: 1.5px solid rgba(255, 255, 255, 0.25) !important;
         border-radius: 0px !important;
         color: #ffffff !important;
-        height: 42px !important;
-        font-size: 14px !important;
+        height: 44px !important;
+        font-size: 15px !important;
         padding-left: 0px !important;
-        padding-right: 30px !important;
+        padding-right: 32px !important;
+        box-shadow: none !important;
         transition: all 0.25s ease !important;
     }
-    .stTextInput input:focus {
-        border-bottom: 2px solid #a78bfa !important;
-        box-shadow: none !important;
-        background: transparent !important;
-    }}
 
-    /* Position icon inside field container on the right side */
-    .input-wrapper {{
+    div[data-testid="stTextInput"] input:focus {
+        border-bottom: 2px solid #a78bfa !important;
+        background: transparent !important;
+        box-shadow: 0 4px 20px rgba(167, 139, 250, 0.25) !important;
+    }
+
+    /* Embedded Icons INSIDE Input Fields */
+    .input-wrapper {
         position: relative !important;
-        margin-bottom: 18px !important;
-    }}
-    .input-icon-right {{
+        margin-bottom: 22px !important;
+    }
+
+    .input-icon-right {
         position: absolute !important;
         right: 4px !important;
         bottom: 10px !important;
-        color: #ffffff !important;
+        color: rgba(255, 255, 255, 0.6) !important;
         font-size: 16px !important;
         pointer-events: none !important;
-        z-index: 10 !important;
-    }}
+        z-index: 20 !important;
+    }
 
-    /* White Pill Primary Button matching reference screenshot */
-    button[kind="primary"] {{
-        background: #ffffff !important;
-        color: #000000 !important;
-        font-weight: 700 !important;
-        font-size: 16px !important;
-        border-radius: 30px !important;
+    /* Secondary Glass Pill Button (Send OTP) */
+    .send-otp-btn button {
+        background: rgba(255, 255, 255, 0.05) !important;
+        border: 1px solid rgba(167, 139, 250, 0.3) !important;
+        color: #ffffff !important;
+        border-radius: 24px !important;
+        font-weight: 600 !important;
+        font-size: 14px !important;
+        height: 46px !important;
+        margin-top: 6px !important;
+        margin-bottom: 6px !important;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2) !important;
+        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+
+    .send-otp-btn button:hover:not(:disabled) {
+        background: rgba(167, 139, 250, 0.15) !important;
+        border-color: rgba(167, 139, 250, 0.5) !important;
+        transform: translateY(-1.5px) !important;
+        box-shadow: 0 8px 25px rgba(167, 139, 250, 0.25) !important;
+    }
+
+    /* Primary Violet Gradient CTA Button (Login) */
+    button[kind="primary"] {
+        background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%) !important;
+        color: #ffffff !important;
+        font-weight: 600 !important;
+        font-size: 15px !important;
+        border-radius: 25px !important;
         height: 50px !important;
         border: none !important;
-        box-shadow: 0 10px 30px rgba(255, 255, 255, 0.25) !important;
-        transition: all 0.25s ease !important;
-    }}
-    button[kind="primary"]:hover {{
+        margin-top: 10px !important;
+        box-shadow: 0 10px 30px rgba(139, 92, 246, 0.5) !important;
+        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+
+    button[kind="primary"]:hover {
         transform: translateY(-2px) !important;
-        box-shadow: 0 14px 35px rgba(255, 255, 255, 0.4) !important;
-        background: #f4f4f5 !important;
-    }}
+        box-shadow: 0 14px 38px rgba(139, 92, 246, 0.65) !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -987,6 +1016,7 @@ if "user" not in st.session_state:
         # ── Email Address Input ──
         st.markdown("<div class='login-field-label'>Email Address</div>", unsafe_allow_html=True)
         st.markdown("<div class='input-wrapper'>", unsafe_allow_html=True)
+        st.markdown("<span class='input-icon-right'>✉️</span>", unsafe_allow_html=True)
         email = st.text_input("Email", placeholder="Enter your email",
                               label_visibility="collapsed", key="login_email")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -1013,6 +1043,7 @@ if "user" not in st.session_state:
         # ── Verification Code Field ──
         st.markdown("<div class='login-field-label'>Verification Code</div>", unsafe_allow_html=True)
         st.markdown("<div class='input-wrapper'>", unsafe_allow_html=True)
+        st.markdown("<span class='input-icon-right'>🔒</span>", unsafe_allow_html=True)
         otp_input = st.text_input("OTP Code", max_chars=6, placeholder="Enter 6-digit code",
                                   label_visibility="collapsed", key="otp_input")
         st.markdown("</div>", unsafe_allow_html=True)
