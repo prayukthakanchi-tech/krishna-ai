@@ -807,15 +807,17 @@ if "user" not in st.session_state:
     [data-testid="column"]:nth-child(2) > div:first-child {
         position: relative;
         z-index: 10;
-        background: rgba(18, 14, 32, 0.65) !important;
+        max-width: 430px !important;
+        margin: 0 auto !important;
+        background: rgba(16, 12, 28, 0.75) !important;
         border: 1px solid rgba(167, 139, 250, 0.35) !important;
-        border-radius: 20px !important;
-        padding: 32px 36px 32px !important;
+        border-radius: 22px !important;
+        padding: 32px 34px 28px !important;
         backdrop-filter: blur(28px) saturate(180%) !important;
         -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
         box-shadow:
-            0 25px 60px rgba(0, 0, 0, 0.7),
-            0 0 45px rgba(124, 58, 237, 0.2),
+            0 25px 60px rgba(0, 0, 0, 0.8),
+            0 0 50px rgba(124, 58, 237, 0.25),
             inset 0 1px 1px rgba(255, 255, 255, 0.15) !important;
         animation: cardFadeIn 0.5s ease-out !important;
     }
@@ -871,11 +873,11 @@ if "user" not in st.session_state:
     .stTextInput input {
         background: transparent !important;
         border: none !important;
-        border-bottom: 1.5px solid rgba(255, 255, 255, 0.75) !important;
+        border-bottom: 1.5px solid rgba(255, 255, 255, 0.25) !important;
         border-radius: 0px !important;
         color: #ffffff !important;
-        height: 44px !important;
-        font-size: 15px !important;
+        height: 42px !important;
+        font-size: 14px !important;
         padding-left: 0px !important;
         padding-right: 30px !important;
         transition: all 0.25s ease !important;
