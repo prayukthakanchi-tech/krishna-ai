@@ -411,15 +411,19 @@ section[data-testid="stSidebar"] {
     border-right: 1px solid rgba(167,139,250,0.08);
 }
 
-/* Chat bubbles */
+/* Chat bubbles — Apple HIG fluid width & glass border */
 .stChatMessage {
+    max-width: 85% !important;
     border-radius: 18px !important;
     background: rgba(255,255,255,0.04) !important;
-    border: 1px solid rgba(255,255,255,0.05) !important;
-    margin-bottom: 10px !important;
-    transition: background 0.2s;
+    border: 1px solid rgba(255,255,255,0.06) !important;
+    margin-bottom: 12px !important;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
-.stChatMessage:hover { background: rgba(255,255,255,0.06) !important; }
+.stChatMessage:hover {
+    background: rgba(255,255,255,0.06) !important;
+    border-color: rgba(167,139,250,0.15) !important;
+}
 
 /* ALL buttons base */
 .stButton > button {
