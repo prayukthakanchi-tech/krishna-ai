@@ -935,28 +935,29 @@ if "user" not in st.session_state:
     </style>
     """, unsafe_allow_html=True)
 
+    # Outer Logo Header (Floating on dark ambient background ABOVE the glass card)
+    icon_html = (
+        f"<div class='logo-container'>"
+        f"<img src='{KRISHNA_ICON}' class='logo-img' alt='Krishna AI'/>"
+        f"</div>"
+    ) if KRISHNA_ICON else "<div style='font-size:64px;text-align:center;margin-bottom:14px;'>🦚</div>"
+
+    st.markdown(f"""
+    <div style='text-align:center;padding:12px 0 24px;'>
+        {icon_html}
+        <h1 style='color:#ffffff;margin:4px 0 4px;font-size:28px;
+                   font-weight:700;letter-spacing:-0.5px;'>Krishna AI</h1>
+        <p style='color:#c4b5fd;font-size:11px;margin:0;
+                  letter-spacing:1.8px;font-weight:600;text-transform:uppercase;'>
+            WISDOM &nbsp;·&nbsp; CLARITY &nbsp;·&nbsp; PEACE
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── Glassmorphism Authentication Card ──
     _, col, _ = st.columns([1, 1.4, 1])
     with col:
-        icon_html = (
-            f"<div class='logo-container'>"
-            f"<img src='{KRISHNA_ICON}' class='logo-img' alt='Krishna AI'/>"
-            f"</div>"
-        ) if KRISHNA_ICON else "<div style='font-size:64px;text-align:center;margin-bottom:14px;'>🦚</div>"
-
-        # Outer Header above card
-        st.markdown(f"""
-        <div style='text-align:center;padding:4px 0 20px;'>
-            {icon_html}
-            <h1 style='color:#ffffff;margin:4px 0 4px;font-size:28px;
-                       font-weight:700;letter-spacing:-0.5px;'>Krishna AI</h1>
-            <p style='color:#c4b5fd;font-size:11px;margin:0;
-                      letter-spacing:1.8px;font-weight:600;text-transform:uppercase;'>
-                WISDOM &nbsp;·&nbsp; CLARITY &nbsp;·&nbsp; PEACE
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # Card Title inside card matching reference mockup
+        # Card Header inside card matching reference mockup
         st.markdown("""
         <div style='text-align:center;margin-bottom:20px;'>
             <h3 style='color:#ffffff;margin:0 0 4px;font-size:22px;font-weight:700;'>Welcome Back</h3>
