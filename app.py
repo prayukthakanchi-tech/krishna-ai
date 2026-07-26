@@ -800,26 +800,32 @@ if "user" not in st.session_state:
     # Login section specific CSS
     st.markdown("""
     <style>
-    /* Card wrapper around the center column */
+    /* Centered Glass Container with entrance animation */
     [data-testid="column"]:nth-child(2) > div:first-child {
-        background: rgba(13, 17, 28, 0.75) !important;
-        border: 1px solid rgba(167, 139, 250, 0.22) !important;
-        border-radius: 20px !important;
-        padding: 32px 36px 36px !important;
-        backdrop-filter: blur(24px) saturate(180%) !important;
-        -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+        background: rgba(13, 16, 26, 0.85) !important;
+        border: 1px solid rgba(167, 139, 250, 0.25) !important;
+        border-radius: 24px !important;
+        padding: 36px 40px 40px !important;
+        backdrop-filter: blur(28px) saturate(180%) !important;
+        -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
         box-shadow:
-            0 24px 60px rgba(0, 0, 0, 0.6),
-            0 0 50px rgba(167, 139, 250, 0.12),
-            inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+            0 30px 80px rgba(0, 0, 0, 0.7),
+            0 0 60px rgba(124, 58, 237, 0.15),
+            inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+        animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) ease-out !important;
     }
-    
-    /* Logo container - HD high resolution size and glowing aura */
+
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(18px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Logo Aura Pulse */
     .logo-container {
         position: relative;
-        width: 140px;
-        height: 140px;
-        margin: 0 auto 18px;
+        width: 135px;
+        height: 135px;
+        margin: 0 auto 16px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -827,7 +833,7 @@ if "user" not in st.session_state:
     .logo-container::before {
         content: '';
         position: absolute;
-        inset: -12px;
+        inset: -10px;
         border-radius: 50%;
         background: radial-gradient(circle, rgba(167, 139, 250, 0.45) 0%, rgba(124, 58, 237, 0.15) 60%, transparent 85%);
         animation: aura-pulse 3.5s ease-in-out infinite alternate;
@@ -839,25 +845,43 @@ if "user" not in st.session_state:
     }
     .logo-img {
         position: relative;
-        width: 130px;
-        height: 130px;
+        width: 125px;
+        height: 125px;
         border-radius: 50%;
         object-fit: cover;
         z-index: 1;
         mix-blend-mode: lighten;
-        filter: drop-shadow(0 0 30px rgba(167, 139, 250, 0.8));
+        filter: drop-shadow(0 0 25px rgba(167, 139, 250, 0.75));
     }
-    
-    /* Login labels */
+
+    /* Field Labels */
     .login-field-label {
-        color: #a1a1aa !important;
+        color: #c4b5fd !important;
         font-size: 11px !important;
-        font-weight: 600 !important;
-        letter-spacing: 0.8px !important;
-        margin: 14px 0 6px !important;
+        font-weight: 700 !important;
+        letter-spacing: 1px !important;
+        margin: 18px 0 8px !important;
         display: flex !important;
         align-items: center !important;
         gap: 6px !important;
+        text-transform: uppercase !important;
+    }
+
+    /* OTP Code field formatting */
+    .otp-input-box input {
+        font-family: 'Courier New', Courier, monospace !important;
+        font-size: 22px !important;
+        letter-spacing: 14px !important;
+        text-align: center !important;
+        font-weight: 700 !important;
+        color: #ffffff !important;
+        padding-left: 20px !important;
+    }
+
+    /* Input focus & height */
+    .stTextInput input {
+        height: 50px !important;
+        border-radius: 14px !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -914,18 +938,22 @@ if "user" not in st.session_state:
             rem = otp_remaining_seconds(email.strip().lower())
             if rem > 0:
                 st.markdown(
-                    f"<p style='font-size:11px;color:#a78bfa;text-align:right;margin:6px 0 0;font-weight:500;'>"
-                    f"⏱ {rem}s until code expires</p>", unsafe_allow_html=True
+                    f"<p style='font-size:11px;color:#a78bfa;text-align:right;margin:6px 0 0;font-weight:600;'>"
+                    f"⏱ Code expires in {rem // 60}m {rem % 60}s</p>", unsafe_allow_html=True
                 )
 
-        st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
         st.markdown("<hr style='border:none;border-top:1px solid rgba(255,255,255,0.08);margin:8px 0 16px;'>",
                     unsafe_allow_html=True)
 
-        # ── OTP input ──
-        st.markdown("<div class='login-field-label'><span>🔑</span> VERIFICATION CODE</div>", unsafe_allow_html=True)
-        otp_input = st.text_input("OTP Code", max_chars=6, placeholder="Enter 6-digit code",
+        # ── OTP input (6-digit spaced verification box) ──
+        st.markdown("<div class='login-field-label'><span>🔐</span> 6-DIGIT VERIFICATION CODE</div>", unsafe_allow_html=True)
+        st.markdown("<div class='otp-input-box'>", unsafe_allow_html=True)
+        otp_input = st.text_input("OTP Code", max_chars=6, placeholder="• • • • • •",
                                   label_visibility="collapsed", key="otp_input")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
 
         if st.button("Sign In to Krishna AI  →", use_container_width=True, type="primary"):
             success, err_msg = otp_verify(email.strip().lower(), otp_input)
