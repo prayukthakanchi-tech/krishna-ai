@@ -480,22 +480,30 @@ button[data-testid="baseButton-primary"]:hover,
     color: #fff !important;
 }
 
-/* Delete button */
-.delete-btn button {
+/* Sleek transparent delete button (no gray box container or border) */
+.delete-btn, .delete-btn > div, .delete-btn > div > button, .delete-btn button {
+    background: transparent !important;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: rgba(255,255,255,0.3) !important;
+    padding: 0 4px !important;
+    font-size: 14px !important;
+    min-height: unset !important;
+    height: auto !important;
+}
+.delete-btn > div > button:hover, .delete-btn button:hover {
     color: #f87171 !important;
     background: transparent !important;
     border: none !important;
-    padding: 2px 6px !important;
-    font-size: 13px !important;
-}
-.delete-btn button:hover {
-    background: rgba(248,113,113,0.1) !important;
-    transform: none !important;
     box-shadow: none !important;
-    border: none !important;
+    transform: scale(1.15) !important;
 }
 
-/* Text inputs */
+/* Text inputs & Focus rings (prevents red line when typing) */
+*:focus, *:focus-visible {
+    outline: none !important;
+}
 .stTextInput input {
     background: rgba(255,255,255,0.06) !important;
     border: 1px solid rgba(255,255,255,0.1) !important;
@@ -507,17 +515,25 @@ button[data-testid="baseButton-primary"]:hover,
 }
 .stTextInput input:focus {
     border-color: #a78bfa !important;
-    box-shadow: 0 0 0 3px rgba(167,139,250,0.15) !important;
+    box-shadow: 0 0 0 2px rgba(167,139,250,0.2) !important;
 }
 .stTextInput input::placeholder { color: #3a3a4a !important; }
 .stTextInput label { color: #777 !important; font-size: 12px !important; }
 
-/* Chat input */
-.stChatInputContainer {
+/* Chat input container — purple focus, no red outline */
+.stChatInputContainer, [data-testid="stChatInput"] {
     background: rgba(255,255,255,0.04) !important;
-    border: 1px solid rgba(255,255,255,0.08) !important;
+    border: 1px solid rgba(167,139,250,0.2) !important;
     border-radius: 16px !important;
     backdrop-filter: blur(12px) !important;
+}
+.stChatInputContainer:focus-within, [data-testid="stChatInput"]:focus-within {
+    border-color: #a78bfa !important;
+    box-shadow: 0 0 0 2px rgba(167,139,250,0.25) !important;
+}
+.stChatInputContainer textarea:focus {
+    outline: none !important;
+    box-shadow: none !important;
 }
 
 /* Typing indicator */
@@ -865,7 +881,7 @@ with st.sidebar:
                     st.markdown("</div>", unsafe_allow_html=True)
                 else:
                     st.markdown('<div class="delete-btn">', unsafe_allow_html=True)
-                    if st.button("🗑️", key=f"del_{cid}", help="Delete chat"):
+                    if st.button("✕", key=f"del_{cid}", help="Delete chat"):
                         st.session_state[confirm_key] = True
                         st.rerun()
                     st.markdown("</div>", unsafe_allow_html=True)
@@ -986,7 +1002,8 @@ else:
             )
             continue
 
-        with st.chat_message(role):
+        avatar = KRISHNA_ICON if role == "assistant" and KRISHNA_ICON else ("👤" if role == "user" else None)
+        with st.chat_message(role, avatar=avatar):
             st.markdown(content)
             if ts:
                 st.markdown(
@@ -1034,7 +1051,7 @@ if user_msg:
     user_entry = {"role": "user", "content": clean_msg, "timestamp": now_str}
     messages.append(user_entry)
 
-    with st.chat_message("user"):
+    with st.chat_message("user", avatar="👤"):
         st.markdown(clean_msg)
         st.markdown(
             f"<p class='msg-ts'>{escape_for_html(now_str)}</p>",
@@ -1073,7 +1090,7 @@ if user_msg:
         typing_slot.empty()
         chunks = []
 
-        with st.chat_message("assistant"):
+        with st.chat_message("assistant", avatar=KRISHNA_ICON if KRISHNA_ICON else "🦚"):
             placeholder = st.empty()
             for chunk in stream:
                 # BUG-15: validate before indexing
