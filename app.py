@@ -987,14 +987,13 @@ if "user" not in st.session_state:
         # ── Email Address Input ──
         st.markdown("<div class='login-field-label'>Email Address</div>", unsafe_allow_html=True)
         st.markdown("<div class='input-wrapper'>", unsafe_allow_html=True)
-        st.markdown("<span class='input-icon-right'>✉️</span>", unsafe_allow_html=True)
         email = st.text_input("Email", placeholder="Enter your email",
                               label_visibility="collapsed", key="login_email")
         st.markdown("</div>", unsafe_allow_html=True)
 
         # ── Send OTP Button ──
         can_send, cooldown_left = otp_can_send(email.strip().lower()) if is_valid_email(email) else (True, 0)
-        send_label = "✈  Send Verification OTP" if can_send else f"⏱  Resend Code in {cooldown_left}s"
+        send_label = "Send Verification OTP" if can_send else f"Resend Code in {cooldown_left}s"
 
         st.markdown('<div class="send-otp-btn">', unsafe_allow_html=True)
         if st.button(send_label, disabled=not can_send, use_container_width=True):
@@ -1011,19 +1010,9 @@ if "user" not in st.session_state:
                     st.error(f"Failed to send email: {err}")
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # ── OR Divider Line ──
-        st.markdown("""
-        <div style='display:flex;align-items:center;margin:18px 0;color:rgba(255,255,255,0.35);font-size:11px;font-weight:600;'>
-            <div style='flex:1;height:1px;background:rgba(255,255,255,0.12);'></div>
-            <span style='padding:0 12px;letter-spacing:1px;'>OR</span>
-            <div style='flex:1;height:1px;background:rgba(255,255,255,0.12);'></div>
-        </div>
-        """, unsafe_allow_html=True)
-
         # ── Verification Code Field ──
         st.markdown("<div class='login-field-label'>Verification Code</div>", unsafe_allow_html=True)
         st.markdown("<div class='input-wrapper'>", unsafe_allow_html=True)
-        st.markdown("<span class='input-icon-right'>🔒</span>", unsafe_allow_html=True)
         otp_input = st.text_input("OTP Code", max_chars=6, placeholder="Enter 6-digit code",
                                   label_visibility="collapsed", key="otp_input")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -1043,21 +1032,18 @@ if "user" not in st.session_state:
             else:
                 st.error(err_msg)
 
-        # ── Resend & Timer Row ──
-        rem = otp_remaining_seconds(email.strip().lower()) if is_valid_email(email) else 0
-        rem_str = f"{rem // 60:02d}:{rem % 60:02d}" if rem > 0 else "00:45"
+        # ── Resend Status Row ──
         st.markdown(
             f"<div style='text-align:center;margin-top:16px;font-size:12px;color:rgba(255,255,255,0.5);'>"
             f"Didn't receive the code? <span style='color:#a78bfa;font-weight:600;cursor:pointer;'>Resend OTP</span>"
-            f"<span style='color:#a78bfa;font-family:monospace;font-weight:600;margin-left:16px;'>{rem_str}</span>"
             f"</div>",
             unsafe_allow_html=True
         )
 
-        # Login page footer
-        st.markdown("""
-        <div class="footer">Created by <span>Prayuktha Kanchi</span> 🦚</div>
-        """, unsafe_allow_html=True)
+    # Login page footer OUTSIDE glass card box at bottom of page
+    st.markdown("""
+    <div class="footer" style="text-align:center;margin-top:32px;margin-bottom:20px;font-size:12px;color:rgba(255,255,255,0.4);">Created by <span style="color:#a78bfa;font-weight:600;">Prayuktha Kanchi</span> 🦚</div>
+    """, unsafe_allow_html=True)
 
     st.stop()
 
