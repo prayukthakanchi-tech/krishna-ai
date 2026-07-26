@@ -1,0 +1,18 @@
+# Environment secrets — NEVER commit these
+.env
+
+# Streamlit secrets — NEVER commit
+.streamlit/secrets.toml
+
+# User data files
+*.json
+!requirements.txt
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# OS files
+.DS_Store
+Thumbs.db
