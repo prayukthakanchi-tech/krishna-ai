@@ -732,12 +732,12 @@ if "user" not in st.session_state:
             inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
     }
     
-    /* Logo container - removes harsh borders and blends naturally */
+    /* Logo container - HD high resolution size and glowing aura */
     .logo-container {
         position: relative;
-        width: 105px;
-        height: 105px;
-        margin: 0 auto 16px;
+        width: 140px;
+        height: 140px;
+        margin: 0 auto 18px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -745,25 +745,25 @@ if "user" not in st.session_state:
     .logo-container::before {
         content: '';
         position: absolute;
-        inset: -8px;
+        inset: -12px;
         border-radius: 50%;
-        background: radial-gradient(circle, rgba(167, 139, 250, 0.35) 0%, rgba(124, 58, 237, 0.1) 60%, transparent 80%);
+        background: radial-gradient(circle, rgba(167, 139, 250, 0.45) 0%, rgba(124, 58, 237, 0.15) 60%, transparent 85%);
         animation: aura-pulse 3.5s ease-in-out infinite alternate;
         z-index: 0;
     }
     @keyframes aura-pulse {
         0% { transform: scale(0.95); opacity: 0.6; }
-        100% { transform: scale(1.1); opacity: 1; }
+        100% { transform: scale(1.12); opacity: 1; }
     }
     .logo-img {
         position: relative;
-        width: 95px;
-        height: 95px;
+        width: 130px;
+        height: 130px;
         border-radius: 50%;
         object-fit: cover;
         z-index: 1;
         mix-blend-mode: lighten;
-        filter: drop-shadow(0 0 20px rgba(167, 139, 250, 0.6));
+        filter: drop-shadow(0 0 30px rgba(167, 139, 250, 0.8));
     }
     
     /* Login labels */
@@ -899,9 +899,9 @@ with st.sidebar:
 
     # Brand header
     icon_small = (
-        f"<img src='{KRISHNA_ICON}' width='32' "
-        "style='border-radius:50%;vertical-align:middle;margin-right:8px;"
-        "box-shadow:0 0 10px rgba(167,139,250,0.4);' alt='Krishna'/>"
+        f"<img src='{KRISHNA_ICON}' width='38' "
+        "style='border-radius:50%;vertical-align:middle;margin-right:10px;"
+        "box-shadow:0 0 14px rgba(167,139,250,0.5);' alt='Krishna'/>"
     ) if KRISHNA_ICON else ""
 
     st.markdown(f"""
@@ -1002,10 +1002,10 @@ with st.sidebar:
 # MAIN HEADER  (UI-20: dynamic title via st.title/markdown)
 # ─────────────────────────────────────────────
 icon_tag = (
-    f"<img src='{KRISHNA_ICON}' width='36' "
-    "style='border-radius:50%;box-shadow:0 0 16px rgba(167,139,250,0.4);"
-    "vertical-align:middle;margin-right:10px;"
-    "border:1px solid rgba(167,139,250,0.25);' alt='Krishna'/>"
+    f"<img src='{KRISHNA_ICON}' width='42' "
+    "style='border-radius:50%;box-shadow:0 0 20px rgba(167,139,250,0.5);"
+    "vertical-align:middle;margin-right:12px;"
+    "border:1px solid rgba(167,139,250,0.3);' alt='Krishna'/>"
 ) if KRISHNA_ICON else "🦚 "
 
 current_cid = st.session_state.chat_id
@@ -1048,9 +1048,9 @@ messages = chats.get(current_cid, []) if current_cid else []
 
 if not messages:
     icon_welcome = (
-        f"<img src='{KRISHNA_ICON}' width='72' "
-        "style='border-radius:50%;box-shadow:0 0 30px rgba(167,139,250,0.35);"
-        "border:1px solid rgba(167,139,250,0.2);' alt='Krishna'/>"
+        f"<img src='{KRISHNA_ICON}' width='96' "
+        "style='border-radius:50%;box-shadow:0 0 40px rgba(167,139,250,0.45);"
+        "border:1.5px solid rgba(167,139,250,0.3);' alt='Krishna'/>"
     ) if KRISHNA_ICON else "<div style='font-size:56px;'>🦚</div>"
 
     st.markdown(f"""
