@@ -903,6 +903,23 @@ if "user" not in st.session_state:
         box-shadow: none !important;
     }
 
+    /* Hide Streamlit 'Press Enter to apply' instructions and '0/6' max_chars counters */
+    div[data-testid="InputInstructions"],
+    div[data-testid="stInputInstruction"],
+    div[data-testid="stWidgetInstructions"],
+    div[data-testid="stTextInput"] small,
+    div[data-testid="stTextInput"] [data-testid="stMarkdownContainer"] small,
+    div[data-testid="stTextInput"] div[style*="font-size"],
+    .stTextInput p,
+    .stTextInput small {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
     /* Clean Underline Input Style with embedded icon space */
     div[data-testid="stTextInput"] input {
         background: transparent !important;
