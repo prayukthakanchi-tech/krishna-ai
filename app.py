@@ -11,11 +11,26 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from groq import Groq
 from dotenv import load_dotenv
+import base64
 
 # =========================
 # 🔐 CONFIG & SECRETS
 # =========================
 load_dotenv()
+
+
+def load_image_b64(path: str) -> str:
+    """Load an image from disk and return a base64 data URI."""
+    try:
+        with open(path, "rb") as f:
+            data = base64.b64encode(f.read()).decode()
+        ext = path.rsplit(".", 1)[-1].lower()
+        return f"data:image/{ext};base64,{data}"
+    except FileNotFoundError:
+        return ""
+
+
+KRISHNA_ICON = load_image_b64("static/krishna_icon.png")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -315,11 +330,19 @@ if "user" not in st.session_state:
     # Center the login card
     _, col, _ = st.columns([1, 2, 1])
     with col:
-        st.markdown("""
+        icon_html = (
+            f"<img src='{KRISHNA_ICON}' width='110' style='"
+            "border-radius:50%;box-shadow:0 0 40px rgba(167,139,250,0.5);"
+            "border:2px solid rgba(167,139,250,0.3);margin-bottom:12px;'"
+            " alt='Krishna'/>"
+        ) if KRISHNA_ICON else "<div style='font-size:72px;'>🦚</div>"
+
+        st.markdown(f"""
         <div style='text-align:center;padding:40px 0 20px;'>
-            <div style='font-size:64px;'>🦚</div>
-            <h1 style='color:#a78bfa;margin:8px 0 4px;font-size:32px;'>Krishna AI</h1>
-            <p style='color:#888;font-size:15px;'>Sign in with your email</p>
+            {icon_html}
+            <h1 style='color:#a78bfa;margin:8px 0 4px;font-size:32px;
+                       font-weight:700;letter-spacing:-0.5px;'>Krishna AI</h1>
+            <p style='color:#666;font-size:14px;margin:0;'>Your divine companion</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -519,10 +542,21 @@ with st.sidebar:
 # 🎭 HEADER
 # =========================
 chat_display = st.session_state.chat_id[:40]
+icon_tag = (
+    f"<img src='{KRISHNA_ICON}' width='38' style='border-radius:50%;"
+    "box-shadow:0 0 16px rgba(167,139,250,0.4);vertical-align:middle;"
+    "margin-right:10px;border:1px solid rgba(167,139,250,0.3);' alt='Krishna'/>"
+) if KRISHNA_ICON else "🦚 "
+
 st.markdown(f"""
-<div style='padding:8px 0 16px;'>
-    <h2 style='margin:0;color:#a78bfa;'>🦚 Krishna AI</h2>
-    <p style='margin:2px 0 0;color:#555;font-size:13px;'>{chat_display}</p>
+<div style='padding:8px 0 16px;display:flex;align-items:center;'>
+    {icon_tag}
+    <div>
+        <h2 style='margin:0;color:#a78bfa;font-size:22px;font-weight:700;'>
+            Krishna AI
+        </h2>
+        <p style='margin:2px 0 0;color:#555;font-size:12px;'>{chat_display}</p>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
