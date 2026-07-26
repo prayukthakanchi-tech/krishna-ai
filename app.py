@@ -795,27 +795,28 @@ if "user" not in st.session_state:
         st.error("⚠️ GROQ_API_KEY is not configured. Add it in Streamlit Cloud > Settings > Secrets.")
         st.stop()
 
-    # Login section specific CSS
+    # Login section specific CSS — Glassmorphism UI
     st.markdown("""
     <style>
-    /* Centered Glass Container with entrance animation */
+    /* Floating Glassmorphism Container */
     [data-testid="column"]:nth-child(2) > div:first-child {
-        background: rgba(13, 16, 26, 0.85) !important;
-        border: 1px solid rgba(167, 139, 250, 0.25) !important;
+        background: rgba(18, 16, 32, 0.42) !important;
+        border: 1px solid rgba(255, 255, 255, 0.16) !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.28) !important;
         border-radius: 24px !important;
-        padding: 36px 40px 40px !important;
-        backdrop-filter: blur(28px) saturate(180%) !important;
-        -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
+        padding: 38px 42px 42px !important;
+        backdrop-filter: blur(32px) saturate(190%) !important;
+        -webkit-backdrop-filter: blur(32px) saturate(190%) !important;
         box-shadow:
-            0 30px 80px rgba(0, 0, 0, 0.7),
-            0 0 60px rgba(124, 58, 237, 0.15),
-            inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
-        animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) ease-out !important;
+            0 30px 80px rgba(0, 0, 0, 0.65),
+            0 0 50px rgba(167, 139, 250, 0.15),
+            inset 0 1px 1px rgba(255, 255, 255, 0.22) !important;
+        animation: glassFadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) ease-out !important;
     }
 
-    @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(18px); }
-        to { opacity: 1; transform: translateY(0); }
+    @keyframes glassFadeIn {
+        from { opacity: 0; transform: translateY(22px) scale(0.98); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
     }
 
     /* Logo Aura Pulse */
@@ -865,6 +866,21 @@ if "user" not in st.session_state:
         text-transform: uppercase !important;
     }
 
+    /* Embedded Glass Inputs */
+    .stTextInput input {
+        background: rgba(255, 255, 255, 0.05) !important;
+        border: 1px solid rgba(255, 255, 255, 0.12) !important;
+        border-radius: 14px !important;
+        color: #ffffff !important;
+        height: 52px !important;
+        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+    .stTextInput input:focus {
+        border-color: #a78bfa !important;
+        box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.25), 0 0 20px rgba(167, 139, 250, 0.15) !important;
+        background: rgba(255, 255, 255, 0.08) !important;
+    }
+
     /* OTP Code field formatting */
     .otp-input-box input {
         font-family: 'Courier New', Courier, monospace !important;
@@ -874,12 +890,6 @@ if "user" not in st.session_state:
         font-weight: 700 !important;
         color: #ffffff !important;
         padding-left: 20px !important;
-    }
-
-    /* Input focus & height */
-    .stTextInput input {
-        height: 50px !important;
-        border-radius: 14px !important;
     }
     </style>
     """, unsafe_allow_html=True)
