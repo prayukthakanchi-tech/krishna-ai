@@ -803,34 +803,34 @@ if "user" not in st.session_state:
         background: #05080f !important;
     }
 
-    /* Centered Glassmorphism Authentication Card (Matches Reference Image) */
+    /* Login Card Container — Replicating custom mock image */
     [data-testid="column"]:nth-child(2) > div:first-child {
         position: relative;
         z-index: 10;
-        background: rgba(255, 255, 255, 0.08) !important;
-        border: 1px solid rgba(255, 255, 255, 0.35) !important;
-        border-radius: 22px !important;
-        padding: 38px 42px 42px !important;
-        backdrop-filter: blur(30px) saturate(180%) !important;
-        -webkit-backdrop-filter: blur(30px) saturate(180%) !important;
+        background: rgba(18, 14, 32, 0.65) !important;
+        border: 1px solid rgba(167, 139, 250, 0.35) !important;
+        border-radius: 20px !important;
+        padding: 32px 36px 32px !important;
+        backdrop-filter: blur(28px) saturate(180%) !important;
+        -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
         box-shadow:
-            0 25px 65px rgba(0, 0, 0, 0.65),
-            0 0 40px rgba(255, 255, 255, 0.08),
-            inset 0 1px 1px rgba(255, 255, 255, 0.3) !important;
-        animation: glassCardFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) ease-out !important;
+            0 25px 60px rgba(0, 0, 0, 0.7),
+            0 0 45px rgba(124, 58, 237, 0.2),
+            inset 0 1px 1px rgba(255, 255, 255, 0.15) !important;
+        animation: cardFadeIn 0.5s ease-out !important;
     }
 
-    @keyframes glassCardFadeIn {
-        from { opacity: 0; transform: translateY(18px) scale(0.98); }
-        to { opacity: 1; transform: translateY(0) scale(1); }
+    @keyframes cardFadeIn {
+        from { opacity: 0; transform: translateY(18px); }
+        to { opacity: 1; transform: translateY(0); }
     }
 
     /* Logo Aura Pulse */
     .logo-container {
         position: relative;
-        width: 120px;
-        height: 120px;
-        margin: 0 auto 14px;
+        width: 110px;
+        height: 110px;
+        margin: 0 auto 10px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -850,8 +850,8 @@ if "user" not in st.session_state:
     }
     .logo-img {
         position: relative;
-        width: 110px;
-        height: 110px;
+        width: 100px;
+        height: 100px;
         border-radius: 50%;
         object-fit: cover;
         z-index: 1;
@@ -861,11 +861,10 @@ if "user" not in st.session_state:
 
     /* Field Labels */
     .login-field-label {
-        color: #ffffff !important;
-        font-size: 14px !important;
+        color: #e4e4e7 !important;
+        font-size: 13px !important;
         font-weight: 500 !important;
-        letter-spacing: 0.2px !important;
-        margin: 20px 0 4px !important;
+        margin: 16px 0 4px !important;
     }
 
     /* Underline Input Style matching reference screenshot */
@@ -930,29 +929,38 @@ if "user" not in st.session_state:
             f"</div>"
         ) if KRISHNA_ICON else "<div style='font-size:64px;text-align:center;margin-bottom:14px;'>🦚</div>"
 
+        # Outer Header above card
         st.markdown(f"""
-        <div style='text-align:center;padding:8px 0 20px;'>
+        <div style='text-align:center;padding:4px 0 20px;'>
             {icon_html}
-            <h1 style='color:#ffffff;margin:0 0 4px;font-size:32px;
-                       font-weight:700;letter-spacing:-0.5px;'>Login</h1>
-            <p style='color:rgba(255,255,255,0.6);font-size:12px;margin:0;
-                      letter-spacing:1px;font-weight:500;'>
-                Krishna AI &nbsp;·&nbsp; Wisdom & Peace
+            <h1 style='color:#ffffff;margin:4px 0 4px;font-size:28px;
+                       font-weight:700;letter-spacing:-0.5px;'>Krishna AI</h1>
+            <p style='color:#c4b5fd;font-size:11px;margin:0;
+                      letter-spacing:1.8px;font-weight:600;text-transform:uppercase;'>
+                WISDOM &nbsp;·&nbsp; CLARITY &nbsp;·&nbsp; PEACE
             </p>
         </div>
         """, unsafe_allow_html=True)
 
-        # ── Email field (Underline input + right-aligned icon) ──
-        st.markdown("<div class='login-field-label'>Email</div>", unsafe_allow_html=True)
+        # Card Title inside card matching reference mockup
+        st.markdown("""
+        <div style='text-align:center;margin-bottom:20px;'>
+            <h3 style='color:#ffffff;margin:0 0 4px;font-size:22px;font-weight:700;'>Welcome Back</h3>
+            <p style='color:rgba(255,255,255,0.6);margin:0;font-size:12px;'>Login to continue to Krishna AI</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # ── Email field (Underline input + right-aligned envelope icon) ──
+        st.markdown("<div class='login-field-label'>Email Address</div>", unsafe_allow_html=True)
         st.markdown("<div class='input-wrapper'>", unsafe_allow_html=True)
         st.markdown("<span class='input-icon-right'>✉️</span>", unsafe_allow_html=True)
-        email = st.text_input("Email", placeholder="name@domain.com",
+        email = st.text_input("Email", placeholder="Enter your email",
                               label_visibility="collapsed", key="login_email")
         st.markdown("</div>", unsafe_allow_html=True)
 
         # ── Send OTP ──
         can_send, cooldown_left = otp_can_send(email.strip().lower()) if is_valid_email(email) else (True, 0)
-        send_label = "✉️  Send Verification OTP" if can_send else f"⏱  Resend Code in {cooldown_left}s"
+        send_label = "✈  Send Verification OTP" if can_send else f"⏱  Resend Code in {cooldown_left}s"
 
         st.markdown('<div class="send-otp-btn">', unsafe_allow_html=True)
         if st.button(send_label, disabled=not can_send, use_container_width=True):
@@ -969,18 +977,14 @@ if "user" not in st.session_state:
                     st.error(f"Failed to send email: {err}")
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # Timer for current OTP
-        if is_valid_email(email):
-            rem = otp_remaining_seconds(email.strip().lower())
-            if rem > 0:
-                st.markdown(
-                    f"<p style='font-size:11px;color:#a78bfa;text-align:right;margin:6px 0 0;font-weight:600;'>"
-                    f"⏱ Code expires in {rem // 60}m {rem % 60}s</p>", unsafe_allow_html=True
-                )
-
-        st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
-        st.markdown("<hr style='border:none;border-top:1px solid rgba(255,255,255,0.15);margin:8px 0 16px;'>",
-                    unsafe_allow_html=True)
+        # OR Divider matching reference mockup
+        st.markdown("""
+        <div style='display:flex;align-items:center;margin:16px 0;color:rgba(255,255,255,0.35);font-size:11px;font-weight:600;'>
+            <div style='flex:1;height:1px;background:rgba(255,255,255,0.12);'></div>
+            <span style='padding:0 10px;letter-spacing:1px;'>OR</span>
+            <div style='flex:1;height:1px;background:rgba(255,255,255,0.12);'></div>
+        </div>
+        """, unsafe_allow_html=True)
 
         # ── OTP Verification Code field (Underline input + right-aligned lock icon) ──
         st.markdown("<div class='login-field-label'>Verification Code</div>", unsafe_allow_html=True)
@@ -990,9 +994,9 @@ if "user" not in st.session_state:
                                   label_visibility="collapsed", key="otp_input")
         st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
 
-        if st.button("Login", use_container_width=True, type="primary"):
+        if st.button("Login to Krishna AI  →", use_container_width=True, type="primary"):
             success, err_msg = otp_verify(email.strip().lower(), otp_input)
             if success:
                 st.session_state.user       = email.strip().lower()
@@ -1003,6 +1007,20 @@ if "user" not in st.session_state:
                 st.rerun()
             else:
                 st.error(err_msg)
+
+        # Timer & Resend status row inside card matching reference screenshot
+        if is_valid_email(email):
+            rem = otp_remaining_seconds(email.strip().lower())
+            rem_str = f"{rem // 60:02d}:{rem % 60:02d}" if rem > 0 else ""
+            timer_tag = f"<span style='color:#a78bfa;font-family:monospace;font-weight:600;margin-left:8px;'>{rem_str}</span>" if rem > 0 else ""
+            st.markdown(
+                f"<div style='text-align:center;margin-top:14px;font-size:12px;color:rgba(255,255,255,0.5);'>"
+                f"Didn't receive the code? <span style='color:#a78bfa;font-weight:600;'>Resend OTP</span>{timer_tag}"
+                f"</div>",
+                unsafe_allow_html=True
+            )
+
+
 
         # Login page footer
         st.markdown("""
