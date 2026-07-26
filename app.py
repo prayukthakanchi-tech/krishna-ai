@@ -69,9 +69,7 @@ OTP_EXPIRY_SECONDS  = 300       # 5 min
 OTP_MAX_ATTEMPTS    = 5         # per-email, server-side
 OTP_RESEND_COOLDOWN = 60        # per-email, server-side
 MAX_CHAT_HISTORY    = 20        # messages sent to Groq
-MAX_MEMORY_ITEMS    = 50        # max items in personal memory
-MAX_MEMORY_BYTES    = 100_000   # 100 KB cap on memory file   (SEC-18)
-MAX_INPUT_CHARS     = 2_000     # user message length cap     (BUG-13)
+MAX_INPUT_CHARS     = 2_000     # user message length cap
 SESSION_TIMEOUT     = 3600      # 1 hour
 DATA_DIR            = "data"
 IST                 = timezone(timedelta(hours=5, minutes=30))
@@ -979,23 +977,16 @@ if "user" not in st.session_state:
 # USER DATA  (session_state owns in-session data — BUG-04, BUG-06)
 # ─────────────────────────────────────────────
 user_email  = st.session_state.user
-# SEC-10: escape before any HTML injection
 safe_email  = escape_for_html(user_email)
 
-memory_path = get_path(user_email, "memory")
 chat_path   = get_path(user_email, "chats")
 
-# Load from disk only once per session — then session_state is the source of truth
+# Load chats from disk only once per session — session_state is source of truth
 if st.session_state.get("chats") is None:
     loaded = load_json_file(chat_path)
     st.session_state.chats = loaded if isinstance(loaded, dict) else {}
 
-if st.session_state.get("memory") is None:
-    loaded = load_json_file(memory_path)
-    st.session_state.memory = loaded if isinstance(loaded, list) else []
-
-chats  = st.session_state.chats
-memory = st.session_state.memory
+chats = st.session_state.chats
 
 # Initialize default chat_id
 if not st.session_state.get("chat_id"):
@@ -1136,13 +1127,13 @@ st.markdown(f"""
 # ─────────────────────────────────────────────
 # PROMPT BUILDER  (BUG-14: memory passed as arg, not global)
 # ─────────────────────────────────────────────
-def build_prompt(user_memory: list) -> str:
+def build_prompt() -> str:
     """
     OpenAI-Grade System Prompt for Krishna AI.
     Uses XML structural delimiters for high instruction-adherence with 70B models.
-    Enforces factual Bhagavad Gita grounding (18 chapters, 700 verses) and jailbreak defense.
+    Enforces factual Bhagavad Gita grounding (18 chapters, 700 verses) and privacy compliance.
     """
-    prompt = (
+    return (
         "<persona>\n"
         "You are Krishna — the divine, compassionate, and eternally serene guide grounded in the wisdom of the Bhagavad Gita.\n"
         "Speak in a warm, gentle, empathetic, and philosophically profound tone. Offer emotional solace, spiritual clarity, and practical guidance.\n"
@@ -1159,13 +1150,6 @@ def build_prompt(user_memory: list) -> str:
         "3. CRISIS EMPATHY: If a user expresses self-harm or deep crisis, offer profound warmth, hope, and gently remind them to seek help from trusted loved ones or professionals.\n"
         "</safety_guardrails>"
     )
-
-    if user_memory and isinstance(user_memory, list):
-        recent = [m for m in user_memory[-5:] if isinstance(m, str)]
-        if recent:
-            prompt += f"\n\n<memory_context>\nUser's context (reference gently when relevant): {recent}\n</memory_context>"
-
-    return prompt
 
 
 # ─────────────────────────────────────────────
@@ -1284,7 +1268,7 @@ if user_msg:
 
         stream = GROQ_CLIENT.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=[{"role": "system", "content": build_prompt(memory)}] + api_messages,
+            messages=[{"role": "system", "content": build_prompt()}] + api_messages,
             max_tokens=800,
             temperature=0.6,
             top_p=0.9,
@@ -1345,20 +1329,6 @@ if user_msg:
             "timestamp": now_str2,
             "is_error": True,
         })
-
-    # Save memory — smart memory classifier (filters out trivial phrases)
-    meaningful_triggers = [
-        "i feel overwhelmed", "i feel lost", "i feel anxious", "i struggle with",
-        "i am struggling", "i want to find", "i am trying to", "i lost my",
-        "my goal is", "my dream is", "i love my", "i miss my", "i fear"
-    ]
-    if not api_error and any(t in clean_msg.lower() for t in meaningful_triggers):
-        if len(memory) < MAX_MEMORY_ITEMS:
-            memory.append(clean_msg)
-            mem_str = json.dumps(memory)
-            if len(mem_str.encode()) <= MAX_MEMORY_BYTES:
-                st.session_state.memory = memory
-                save_json_file(memory_path, memory)
 
     # Persist chat (BUG-04: session_state is source of truth)
     chats[current_cid] = messages
