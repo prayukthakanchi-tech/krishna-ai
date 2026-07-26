@@ -861,6 +861,23 @@ if "user" not in st.session_state:
         filter: drop-shadow(0 0 25px rgba(167, 139, 250, 0.75));
     }
 
+    /* Primary Violet Gradient Login Button matching reference mockup */
+    button[kind="primary"] {
+        background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%) !important;
+        color: #ffffff !important;
+        font-weight: 600 !important;
+        font-size: 15px !important;
+        border-radius: 25px !important;
+        height: 48px !important;
+        border: none !important;
+        box-shadow: 0 10px 30px rgba(139, 92, 246, 0.45) !important;
+        transition: all 0.25s ease !important;
+    }
+    button[kind="primary"]:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 14px 35px rgba(139, 92, 246, 0.6) !important;
+    }
+
     /* Clean Underline Input Style matching reference screenshot */
     .stTextInput input {
         background: transparent !important;
