@@ -838,13 +838,11 @@ with st.sidebar:
         )
         for cid in list(real_chats.keys()):
             is_active = st.session_state.chat_id == cid
-            # Confirm-delete state (UI-06)
             confirm_key = f"confirm_del_{cid}"
 
-            c1, c2 = st.columns([6, 1])
+            c1, c2 = st.columns([4.8, 1.2])
             with c1:
-                # UI-09: proper ellipsis
-                label = (cid[:25] + "…") if len(cid) > 25 else cid
+                label = (cid[:22] + "…") if len(cid) > 22 else cid
                 wrap_class = "active-chat" if is_active else ""
                 st.markdown(f"<div class='{wrap_class}'>", unsafe_allow_html=True)
                 if st.button(label, key=f"open_{cid}", use_container_width=True):
@@ -855,7 +853,6 @@ with st.sidebar:
 
             with c2:
                 if st.session_state.get(confirm_key):
-                    # Show confirm ✓ and cancel ✕
                     st.markdown('<div class="danger-btn">', unsafe_allow_html=True)
                     if st.button("✓", key=f"do_del_{cid}", help="Confirm delete"):
                         del chats[cid]
@@ -868,7 +865,7 @@ with st.sidebar:
                     st.markdown("</div>", unsafe_allow_html=True)
                 else:
                     st.markdown('<div class="delete-btn">', unsafe_allow_html=True)
-                    if st.button("✕", key=f"del_{cid}", help="Delete"):
+                    if st.button("🗑️", key=f"del_{cid}", help="Delete chat"):
                         st.session_state[confirm_key] = True
                         st.rerun()
                     st.markdown("</div>", unsafe_allow_html=True)
