@@ -596,10 +596,20 @@ button[data-testid="baseButton-primary"]:hover,
 
 /* Footer */
 .footer {
-    position: fixed; bottom: 12px; left: 50%;
+    position: fixed;
+    bottom: 14px;
+    left: 50%;
     transform: translateX(-50%);
-    color: rgba(255,255,255,0.18); font-size: 11px;
-    white-space: nowrap; pointer-events: none; z-index: 100;
+    color: rgba(255,255,255,0.4);
+    font-size: 12px;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 99999;
+}
+.footer span {
+    color: #a78bfa;
+    font-weight: 600;
 }
 
 /* Sidebar brand */
@@ -846,6 +856,11 @@ if "user" not in st.session_state:
                 st.rerun()
             else:
                 st.error(err_msg)
+
+        # Login page footer
+        st.markdown("""
+        <div class="footer">Created by <span>Prayuktha Kanchi</span> 🦚</div>
+        """, unsafe_allow_html=True)
 
     st.stop()
 
@@ -1219,5 +1234,5 @@ if user_msg:
 # FOOTER
 # ─────────────────────────────────────────────
 st.markdown("""
-<div class="footer">Krishna AI &nbsp;·&nbsp; Built with clarity 🦚</div>
+<div class="footer">Created by <span>Prayuktha Kanchi</span> 🦚</div>
 """, unsafe_allow_html=True)
