@@ -920,41 +920,40 @@ if "user" not in st.session_state:
         padding: 0 !important;
     }
 
-    /* Clean Underline Input Style with embedded icon space */
+    /* Premium Modern Rounded Glass Input Fields (ChatGPT / Claude style) */
     div[data-testid="stTextInput"] input {
-        background: transparent !important;
-        border: none !important;
-        border-bottom: 1.5px solid rgba(255, 255, 255, 0.25) !important;
-        border-radius: 0px !important;
+        background: rgba(255, 255, 255, 0.08) !important;
+        border: 1.5px solid rgba(255, 255, 255, 0.18) !important;
+        border-radius: 14px !important;
         color: #ffffff !important;
-        height: 44px !important;
+        height: 56px !important;
         font-size: 15px !important;
-        padding-left: 0px !important;
-        padding-right: 32px !important;
+        padding-left: 20px !important;
+        padding-right: 20px !important;
         box-shadow: none !important;
-        transition: all 0.25s ease !important;
+        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+
+    div[data-testid="stTextInput"] input::placeholder {
+        color: rgba(255, 255, 255, 0.45) !important;
+    }
+
+    div[data-testid="stTextInput"] input:hover {
+        border-color: rgba(255, 255, 255, 0.3) !important;
+        background: rgba(255, 255, 255, 0.1) !important;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25) !important;
     }
 
     div[data-testid="stTextInput"] input:focus {
-        border-bottom: 2px solid #a78bfa !important;
-        background: transparent !important;
-        box-shadow: 0 4px 20px rgba(167, 139, 250, 0.25) !important;
+        border-color: #a78bfa !important;
+        background: rgba(255, 255, 255, 0.12) !important;
+        box-shadow: 0 0 0 3.5px rgba(167, 139, 250, 0.25), 0 0 25px rgba(167, 139, 250, 0.2) !important;
+        outline: none !important;
     }
 
-    /* Embedded Icons INSIDE Input Fields */
     .input-wrapper {
         position: relative !important;
-        margin-bottom: 22px !important;
-    }
-
-    .input-icon-right {
-        position: absolute !important;
-        right: 4px !important;
-        bottom: 10px !important;
-        color: rgba(255, 255, 255, 0.6) !important;
-        font-size: 16px !important;
-        pointer-events: none !important;
-        z-index: 20 !important;
+        margin-bottom: 20px !important;
     }
 
     /* Secondary Glass Pill Button (Send OTP) */
