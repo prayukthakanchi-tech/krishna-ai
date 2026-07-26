@@ -1016,7 +1016,6 @@ if "user" not in st.session_state:
         # ── Email Address Input ──
         st.markdown("<div class='login-field-label'>Email Address</div>", unsafe_allow_html=True)
         st.markdown("<div class='input-wrapper'>", unsafe_allow_html=True)
-        st.markdown("<span class='input-icon-right'>✉️</span>", unsafe_allow_html=True)
         email = st.text_input("Email", placeholder="Enter your email",
                               label_visibility="collapsed", key="login_email")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -1043,7 +1042,6 @@ if "user" not in st.session_state:
         # ── Verification Code Field ──
         st.markdown("<div class='login-field-label'>Verification Code</div>", unsafe_allow_html=True)
         st.markdown("<div class='input-wrapper'>", unsafe_allow_html=True)
-        st.markdown("<span class='input-icon-right'>🔒</span>", unsafe_allow_html=True)
         otp_input = st.text_input("OTP Code", max_chars=6, placeholder="Enter 6-digit code",
                                   label_visibility="collapsed", key="otp_input")
         st.markdown("</div>", unsafe_allow_html=True)
