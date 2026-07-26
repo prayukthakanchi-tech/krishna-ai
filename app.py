@@ -980,6 +980,21 @@ if "user" not in st.session_state:
         transform: translateY(-2px) !important;
         box-shadow: 0 14px 38px rgba(139, 92, 246, 0.65) !important;
     }
+
+    /* Modern Register Link Styling */
+    .register-link {
+        color: #a78bfa !important;
+        font-weight: 600 !important;
+        cursor: pointer !important;
+        text-decoration: none !important;
+        transition: all 0.25s ease !important;
+        padding-bottom: 2px !important;
+        border-bottom: 1.5px solid transparent !important;
+    }
+    .register-link:hover {
+        color: #c4b5fd !important;
+        border-bottom: 1.5px solid #c4b5fd !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -1061,9 +1076,17 @@ if "user" not in st.session_state:
             else:
                 st.error(err_msg)
 
+        # ── Don't Have An Account? Register ──
+        st.markdown(
+            f"<div style='text-align:center;margin-top:22px;font-size:14px;color:#a1a1aa;font-weight:400;letter-spacing:-0.2px;'>"
+            f"Don't have an account? <span class='register-link'>Register</span>"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+
         # ── Resend Status Row ──
         st.markdown(
-            f"<div style='text-align:center;margin-top:16px;font-size:12px;color:rgba(255,255,255,0.5);'>"
+            f"<div style='text-align:center;margin-top:14px;font-size:12px;color:rgba(255,255,255,0.45);'>"
             f"Didn't receive the code? <span style='color:#a78bfa;font-weight:600;cursor:pointer;'>Resend OTP</span>"
             f"</div>",
             unsafe_allow_html=True
