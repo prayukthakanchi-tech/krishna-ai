@@ -803,16 +803,18 @@ if "user" not in st.session_state:
         background: #05080f !important;
     }
 
-    /* ONE UNIFIED GLASSMORPHISM AUTHENTICATION CARD */
-    [data-testid="column"]:nth-child(2) > div:first-child {
-        position: relative;
-        z-index: 10;
-        max-width: 460px !important;
+    /* Bulletproof Glassmorphism Authentication Card Target (Streamlit 1.35+) */
+    div[data-testid="stColumn"]:nth-child(2) > div:first-child,
+    div[data-testid="column"]:nth-child(2) > div:first-child,
+    div.stColumn:nth-child(2) > div:first-child {
+        position: relative !important;
+        z-index: 10 !important;
+        max-width: 440px !important;
         margin: 0 auto !important;
-        background: rgba(18, 14, 32, 0.75) !important;
+        background: rgba(16, 12, 28, 0.75) !important;
         border: 1px solid rgba(167, 139, 250, 0.35) !important;
-        border-radius: 24px !important;
-        padding: 44px 40px 36px !important;
+        border-radius: 22px !important;
+        padding: 36px 38px 32px !important;
         backdrop-filter: blur(30px) saturate(180%) !important;
         -webkit-backdrop-filter: blur(30px) saturate(180%) !important;
         box-shadow:
@@ -861,25 +863,26 @@ if "user" not in st.session_state:
         filter: drop-shadow(0 0 25px rgba(167, 139, 250, 0.75));
     }
 
-    /* Primary Violet Gradient Login Button matching reference mockup */
-    button[kind="primary"] {
-        background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%) !important;
-        color: #ffffff !important;
-        font-weight: 600 !important;
-        font-size: 15px !important;
-        border-radius: 25px !important;
-        height: 48px !important;
-        border: none !important;
-        box-shadow: 0 10px 30px rgba(139, 92, 246, 0.45) !important;
-        transition: all 0.25s ease !important;
+    /* Field Labels */
+    .login-field-label {
+        color: #e4e4e7 !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        margin: 18px 0 4px !important;
     }
-    button[kind="primary"]:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 14px 35px rgba(139, 92, 246, 0.6) !important;
+
+    /* Force all inner Streamlit input wrappers to be transparent */
+    div[data-testid="stTextInput"],
+    div[data-testid="stTextInput"] > div,
+    div[data-testid="stTextInput"] > div > div,
+    div[data-baseweb="input"] {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
     }
 
     /* Clean Underline Input Style matching reference screenshot */
-    .stTextInput input {
+    div[data-testid="stTextInput"] input {
         background: transparent !important;
         border: none !important;
         border-bottom: 1.5px solid rgba(255, 255, 255, 0.25) !important;
