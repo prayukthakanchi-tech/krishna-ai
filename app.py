@@ -885,41 +885,45 @@ if "user" not in st.session_state:
 
     /* Clean Labels matching reference image */
     .login-field-label {{
-        color: #e4e4e7 !important;
-        font-size: 13px !important;
+        color: #ffffff !important;
+        font-size: 14px !important;
         font-weight: 500 !important;
-        letter-spacing: 0.3px !important;
-        margin: 18px 0 8px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: space-between !important;
+        letter-spacing: 0.2px !important;
+        margin: 20px 0 4px !important;
     }}
 
-    /* Embedded Glass Inputs */
+    /* Underline Input Style matching reference screenshot */
     .stTextInput input {{
-        background: rgba(255, 255, 255, 0.06) !important;
-        border: 1px solid rgba(255, 255, 255, 0.22) !important;
-        border-radius: 12px !important;
+        background: transparent !important;
+        border: none !important;
+        border-bottom: 1.5px solid rgba(255, 255, 255, 0.75) !important;
+        border-radius: 0px !important;
         color: #ffffff !important;
-        height: 48px !important;
+        height: 44px !important;
         font-size: 15px !important;
-        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        padding-left: 0px !important;
+        padding-right: 30px !important;
+        transition: all 0.25s ease !important;
     }}
     .stTextInput input:focus {{
-        border-color: #ffffff !important;
-        box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.2), 0 0 20px rgba(167, 139, 250, 0.2) !important;
-        background: rgba(255, 255, 255, 0.1) !important;
+        border-bottom: 2.5px solid #ffffff !important;
+        box-shadow: none !important;
+        background: transparent !important;
     }}
 
-    /* OTP Code field formatting */
-    .otp-input-box input {{
-        font-family: 'Courier New', Courier, monospace !important;
-        font-size: 22px !important;
-        letter-spacing: 14px !important;
-        text-align: center !important;
-        font-weight: 700 !important;
+    /* Position icon inside field container on the right side */
+    .input-wrapper {{
+        position: relative !important;
+        margin-bottom: 18px !important;
+    }}
+    .input-icon-right {{
+        position: absolute !important;
+        right: 4px !important;
+        bottom: 10px !important;
         color: #ffffff !important;
-        padding-left: 20px !important;
+        font-size: 16px !important;
+        pointer-events: none !important;
+        z-index: 10 !important;
     }}
 
     /* White Pill Primary Button matching reference screenshot */
@@ -962,10 +966,13 @@ if "user" not in st.session_state:
         </div>
         """, unsafe_allow_html=True)
 
-        # ── Email field ──
-        st.markdown("<div class='login-field-label'><span>Email</span> <span>✉️</span></div>", unsafe_allow_html=True)
+        # ── Email field (Underline input + right-aligned icon) ──
+        st.markdown("<div class='login-field-label'>Email</div>", unsafe_allow_html=True)
+        st.markdown("<div class='input-wrapper'>", unsafe_allow_html=True)
+        st.markdown("<span class='input-icon-right'>✉️</span>", unsafe_allow_html=True)
         email = st.text_input("Email", placeholder="name@domain.com",
                               label_visibility="collapsed", key="login_email")
+        st.markdown("</div>", unsafe_allow_html=True)
 
         # ── Send OTP ──
         can_send, cooldown_left = otp_can_send(email.strip().lower()) if is_valid_email(email) else (True, 0)
@@ -996,13 +1003,14 @@ if "user" not in st.session_state:
                 )
 
         st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
-        st.markdown("<hr style='border:none;border-top:1px solid rgba(255,255,255,0.12);margin:8px 0 16px;'>",
+        st.markdown("<hr style='border:none;border-top:1px solid rgba(255,255,255,0.15);margin:8px 0 16px;'>",
                     unsafe_allow_html=True)
 
-        # ── OTP input (6-digit spaced verification box) ──
-        st.markdown("<div class='login-field-label'><span>Verification Code</span> <span>🔒</span></div>", unsafe_allow_html=True)
-        st.markdown("<div class='otp-input-box'>", unsafe_allow_html=True)
-        otp_input = st.text_input("OTP Code", max_chars=6, placeholder="• • • • • •",
+        # ── OTP Verification Code field (Underline input + right-aligned lock icon) ──
+        st.markdown("<div class='login-field-label'>Verification Code</div>", unsafe_allow_html=True)
+        st.markdown("<div class='input-wrapper'>", unsafe_allow_html=True)
+        st.markdown("<span class='input-icon-right'>🔒</span>", unsafe_allow_html=True)
+        otp_input = st.text_input("OTP Code", max_chars=6, placeholder="Enter 6-digit code",
                                   label_visibility="collapsed", key="otp_input")
         st.markdown("</div>", unsafe_allow_html=True)
 
