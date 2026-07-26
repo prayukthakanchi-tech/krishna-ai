@@ -803,20 +803,20 @@ if "user" not in st.session_state:
         background: #05080f !important;
     }
 
-    /* Login Card Container — Replicating custom mock image */
+    /* ONE UNIFIED GLASSMORPHISM AUTHENTICATION CARD */
     [data-testid="column"]:nth-child(2) > div:first-child {
         position: relative;
         z-index: 10;
-        max-width: 430px !important;
+        max-width: 460px !important;
         margin: 0 auto !important;
-        background: rgba(16, 12, 28, 0.75) !important;
+        background: rgba(18, 14, 32, 0.75) !important;
         border: 1px solid rgba(167, 139, 250, 0.35) !important;
-        border-radius: 22px !important;
-        padding: 32px 34px 28px !important;
-        backdrop-filter: blur(28px) saturate(180%) !important;
-        -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
+        border-radius: 24px !important;
+        padding: 44px 40px 36px !important;
+        backdrop-filter: blur(30px) saturate(180%) !important;
+        -webkit-backdrop-filter: blur(30px) saturate(180%) !important;
         box-shadow:
-            0 25px 60px rgba(0, 0, 0, 0.8),
+            0 30px 70px rgba(0, 0, 0, 0.8),
             0 0 50px rgba(124, 58, 237, 0.25),
             inset 0 1px 1px rgba(255, 255, 255, 0.15) !important;
         animation: cardFadeIn 0.5s ease-out !important;
@@ -865,11 +865,6 @@ if "user" not in st.session_state:
     .login-field-label {
         color: #e4e4e7 !important;
         font-size: 13px !important;
-        font-weight: 500 !important;
-        margin: 16px 0 4px !important;
-    }
-
-    /* Underline Input Style matching reference screenshot */
     .stTextInput input {
         background: transparent !important;
         border: none !important;
