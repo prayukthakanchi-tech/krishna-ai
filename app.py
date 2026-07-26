@@ -113,8 +113,19 @@ def get_krishna_icon() -> str:
         return ""
 
 
+def get_login_bg() -> str:
+    """Load abstract wave background image as base64."""
+    try:
+        with open("static/login_bg.png", "rb") as f:
+            data = base64.b64encode(f.read()).decode()
+        return f"data:image/png;base64,{data}"
+    except FileNotFoundError:
+        return ""
+
+
 GROQ_CLIENT  = get_groq_client()
 KRISHNA_ICON = get_krishna_icon()
+LOGIN_BG     = get_login_bg()
 
 
 # ─────────────────────────────────────────────
@@ -795,41 +806,60 @@ if "user" not in st.session_state:
         st.error("⚠️ GROQ_API_KEY is not configured. Add it in Streamlit Cloud > Settings > Secrets.")
         st.stop()
 
-    # Login section specific CSS — Glassmorphism UI
-    st.markdown("""
-    <style>
-    /* Floating Glassmorphism Container */
-    [data-testid="column"]:nth-child(2) > div:first-child {
-        background: rgba(18, 16, 32, 0.42) !important;
-        border: 1px solid rgba(255, 255, 255, 0.16) !important;
-        border-top: 1px solid rgba(255, 255, 255, 0.28) !important;
-        border-radius: 24px !important;
-        padding: 38px 42px 42px !important;
-        backdrop-filter: blur(32px) saturate(190%) !important;
-        -webkit-backdrop-filter: blur(32px) saturate(190%) !important;
-        box-shadow:
-            0 30px 80px rgba(0, 0, 0, 0.65),
-            0 0 50px rgba(167, 139, 250, 0.15),
-            inset 0 1px 1px rgba(255, 255, 255, 0.22) !important;
-        animation: glassFadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) ease-out !important;
-    }
+    # Login section specific CSS — Matches attached inspiration screenshot
+    bg_style = f"background: url('{LOGIN_BG}') center/cover no-repeat fixed !important;" if LOGIN_BG else "background: #05080f !important;"
 
-    @keyframes glassFadeIn {
-        from { opacity: 0; transform: translateY(22px) scale(0.98); }
-        to { opacity: 1; transform: translateY(0) scale(1); }
-    }
+    st.markdown(f"""
+    <style>
+    /* Full Page Abstract Wave Background */
+    .stApp {{
+        {bg_style}
+    }}
+
+    /* Dark Overlay for readability */
+    .stApp::before {{
+        content: '';
+        position: fixed;
+        inset: 0;
+        background: rgba(5, 5, 12, 0.45);
+        backdrop-filter: blur(4px);
+        z-index: 0;
+        pointer-events: none;
+    }}
+
+    /* Centered Glass Container matching attached image */
+    [data-testid="column"]:nth-child(2) > div:first-child {{
+        position: relative;
+        z-index: 10;
+        background: rgba(12, 12, 22, 0.48) !important;
+        border: 1.5px solid rgba(255, 255, 255, 0.35) !important;
+        border-radius: 20px !important;
+        padding: 40px 42px 42px !important;
+        backdrop-filter: blur(28px) saturate(180%) !important;
+        -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
+        box-shadow:
+            0 25px 70px rgba(0, 0, 0, 0.7),
+            0 0 40px rgba(255, 255, 255, 0.08),
+            inset 0 1px 1px rgba(255, 255, 255, 0.3) !important;
+        animation: glassFadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) ease-out !important;
+    }}
+
+    @keyframes glassFadeIn {{
+        from {{ opacity: 0; transform: translateY(20px) scale(0.98); }}
+        to {{ opacity: 1; transform: translateY(0) scale(1); }}
+    }}
 
     /* Logo Aura Pulse */
-    .logo-container {
+    .logo-container {{
         position: relative;
-        width: 135px;
-        height: 135px;
-        margin: 0 auto 16px;
+        width: 120px;
+        height: 120px;
+        margin: 0 auto 14px;
         display: flex;
         align-items: center;
         justify-content: center;
-    }
-    .logo-container::before {
+    }}
+    .logo-container::before {{
         content: '';
         position: absolute;
         inset: -10px;
@@ -837,52 +867,52 @@ if "user" not in st.session_state:
         background: radial-gradient(circle, rgba(167, 139, 250, 0.45) 0%, rgba(124, 58, 237, 0.15) 60%, transparent 85%);
         animation: aura-pulse 3.5s ease-in-out infinite alternate;
         z-index: 0;
-    }
-    @keyframes aura-pulse {
-        0% { transform: scale(0.95); opacity: 0.6; }
-        100% { transform: scale(1.12); opacity: 1; }
-    }
-    .logo-img {
+    }}
+    @keyframes aura-pulse {{
+        0% {{ transform: scale(0.95); opacity: 0.6; }}
+        100% {{ transform: scale(1.12); opacity: 1; }}
+    }}
+    .logo-img {{
         position: relative;
-        width: 125px;
-        height: 125px;
+        width: 110px;
+        height: 110px;
         border-radius: 50%;
         object-fit: cover;
         z-index: 1;
         mix-blend-mode: lighten;
         filter: drop-shadow(0 0 25px rgba(167, 139, 250, 0.75));
-    }
+    }}
 
-    /* Field Labels */
-    .login-field-label {
-        color: #c4b5fd !important;
-        font-size: 11px !important;
-        font-weight: 700 !important;
-        letter-spacing: 1px !important;
+    /* Clean Labels matching reference image */
+    .login-field-label {{
+        color: #e4e4e7 !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        letter-spacing: 0.3px !important;
         margin: 18px 0 8px !important;
         display: flex !important;
         align-items: center !important;
-        gap: 6px !important;
-        text-transform: uppercase !important;
-    }
+        justify-content: space-between !important;
+    }}
 
     /* Embedded Glass Inputs */
-    .stTextInput input {
-        background: rgba(255, 255, 255, 0.05) !important;
-        border: 1px solid rgba(255, 255, 255, 0.12) !important;
-        border-radius: 14px !important;
+    .stTextInput input {{
+        background: rgba(255, 255, 255, 0.06) !important;
+        border: 1px solid rgba(255, 255, 255, 0.22) !important;
+        border-radius: 12px !important;
         color: #ffffff !important;
-        height: 52px !important;
+        height: 48px !important;
+        font-size: 15px !important;
         transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
-    }
-    .stTextInput input:focus {
-        border-color: #a78bfa !important;
-        box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.25), 0 0 20px rgba(167, 139, 250, 0.15) !important;
-        background: rgba(255, 255, 255, 0.08) !important;
-    }
+    }}
+    .stTextInput input:focus {{
+        border-color: #ffffff !important;
+        box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.2), 0 0 20px rgba(167, 139, 250, 0.2) !important;
+        background: rgba(255, 255, 255, 0.1) !important;
+    }}
 
     /* OTP Code field formatting */
-    .otp-input-box input {
+    .otp-input-box input {{
         font-family: 'Courier New', Courier, monospace !important;
         font-size: 22px !important;
         letter-spacing: 14px !important;
@@ -890,7 +920,25 @@ if "user" not in st.session_state:
         font-weight: 700 !important;
         color: #ffffff !important;
         padding-left: 20px !important;
-    }
+    }}
+
+    /* White Pill Primary Button matching reference screenshot */
+    button[kind="primary"] {{
+        background: #ffffff !important;
+        color: #000000 !important;
+        font-weight: 700 !important;
+        font-size: 16px !important;
+        border-radius: 30px !important;
+        height: 50px !important;
+        border: none !important;
+        box-shadow: 0 10px 30px rgba(255, 255, 255, 0.25) !important;
+        transition: all 0.25s ease !important;
+    }}
+    button[kind="primary"]:hover {{
+        transform: translateY(-2px) !important;
+        box-shadow: 0 14px 35px rgba(255, 255, 255, 0.4) !important;
+        background: #f4f4f5 !important;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -903,22 +951,19 @@ if "user" not in st.session_state:
         ) if KRISHNA_ICON else "<div style='font-size:64px;text-align:center;margin-bottom:14px;'>🦚</div>"
 
         st.markdown(f"""
-        <div style='text-align:center;padding:12px 0 24px;'>
+        <div style='text-align:center;padding:8px 0 20px;'>
             {icon_html}
-            <h1 style='color:#ffffff;margin:0 0 6px;font-size:30px;
-                       font-weight:700;letter-spacing:-0.5px;
-                       background: linear-gradient(135deg, #ffffff 0%, #c4b5fd 100%);
-                       -webkit-background-clip: text;
-                       -webkit-text-fill-color: transparent;'>Krishna AI</h1>
-            <p style='color:#a78bfa;font-size:11px;margin:0;
-                      letter-spacing:1.5px;font-weight:600;text-transform:uppercase;'>
-                Wisdom &nbsp;·&nbsp; Clarity &nbsp;·&nbsp; Peace
+            <h1 style='color:#ffffff;margin:0 0 4px;font-size:32px;
+                       font-weight:700;letter-spacing:-0.5px;'>Login</h1>
+            <p style='color:rgba(255,255,255,0.6);font-size:12px;margin:0;
+                      letter-spacing:1px;font-weight:500;'>
+                Krishna AI &nbsp;·&nbsp; Wisdom & Peace
             </p>
         </div>
         """, unsafe_allow_html=True)
 
         # ── Email field ──
-        st.markdown("<div class='login-field-label'><span>✉️</span> EMAIL ADDRESS</div>", unsafe_allow_html=True)
+        st.markdown("<div class='login-field-label'><span>Email</span> <span>✉️</span></div>", unsafe_allow_html=True)
         email = st.text_input("Email", placeholder="name@domain.com",
                               label_visibility="collapsed", key="login_email")
 
@@ -951,19 +996,19 @@ if "user" not in st.session_state:
                 )
 
         st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
-        st.markdown("<hr style='border:none;border-top:1px solid rgba(255,255,255,0.08);margin:8px 0 16px;'>",
+        st.markdown("<hr style='border:none;border-top:1px solid rgba(255,255,255,0.12);margin:8px 0 16px;'>",
                     unsafe_allow_html=True)
 
         # ── OTP input (6-digit spaced verification box) ──
-        st.markdown("<div class='login-field-label'><span>🔐</span> 6-DIGIT VERIFICATION CODE</div>", unsafe_allow_html=True)
+        st.markdown("<div class='login-field-label'><span>Verification Code</span> <span>🔒</span></div>", unsafe_allow_html=True)
         st.markdown("<div class='otp-input-box'>", unsafe_allow_html=True)
         otp_input = st.text_input("OTP Code", max_chars=6, placeholder="• • • • • •",
                                   label_visibility="collapsed", key="otp_input")
         st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
 
-        if st.button("Sign In to Krishna AI  →", use_container_width=True, type="primary"):
+        if st.button("Login", use_container_width=True, type="primary"):
             success, err_msg = otp_verify(email.strip().lower(), otp_input)
             if success:
                 st.session_state.user       = email.strip().lower()
