@@ -309,26 +309,105 @@ def send_otp_email(to_email: str, otp: str) -> tuple[bool, str]:
     if not is_valid_email(to_email):
         return False, "Invalid email address."
 
+    expiry_mins = OTP_EXPIRY_SECONDS // 60
+
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = "Your Krishna AI Login Code"
+    msg["Subject"] = f"{otp} is your Krishna AI verification code"
     msg["From"]    = f"Krishna AI <{EMAIL}>"
     msg["To"]      = to_email
+    msg["X-Entity-Ref-ID"] = generate_otp(10)
 
-    plain = f"Your OTP is: {otp}\nValid for {OTP_EXPIRY_SECONDS // 60} minutes."
-    html_body = f"""
-    <div style="font-family:Inter,sans-serif;background:#0b1a2b;padding:36px;
-                border-radius:16px;max-width:480px;margin:auto;color:white;">
-        <h2 style="color:#a78bfa;margin:0 0 8px;">🦚 Krishna AI</h2>
-        <p style="color:#aaa;margin:0 0 20px;">Your one-time login code:</p>
-        <div style="font-size:40px;font-weight:700;letter-spacing:12px;
-                    background:#1e2d40;padding:20px 28px;border-radius:10px;
-                    display:inline-block;border:1px solid rgba(167,139,250,0.3);">
-            {otp}
-        </div>
-        <p style="color:#666;font-size:13px;margin-top:20px;">
-            Valid for {OTP_EXPIRY_SECONDS // 60} minutes. Never share this code.
-        </p>
-    </div>"""
+    # ── Plain Text Fallback ──
+    plain = f"""Hello,
+
+Your Krishna AI verification code is: {otp}
+
+This code will expire in {expiry_mins} minutes and can only be used once.
+
+SECURITY WARNING:
+Never share this code with anyone. Krishna AI support will never ask for your code via email or phone. If you did not request this code, please ignore this email.
+
+--
+Krishna AI · Created by Prayuktha Kanchi
+This is an automated message. Please do not reply.
+"""
+
+    # ── Production-Grade HTML Template (Gmail / Outlook Compatible Inline CSS) ──
+    html_body = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Krishna AI Verification Code</title>
+</head>
+<body style="margin:0;padding:0;background-color:#05040a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+  <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#05040a;padding:40px 10px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width:520px;background-color:#0e0a1a;border:1px solid #2a1f4d;border-radius:20px;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,0.6);">
+          
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#181133 0%,#0e0a1a 100%);padding:36px 32px 28px;text-align:center;border-bottom:1px solid #231842;">
+              <div style="display:inline-block;width:56px;height:56px;line-height:56px;border-radius:50%;background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.3);font-size:28px;margin-bottom:12px;">🦚</div>
+              <h1 style="margin:0;color:#ffffff;font-size:26px;font-weight:700;letter-spacing:-0.5px;">Krishna AI</h1>
+              <p style="margin:4px 0 0;color:#a78bfa;font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;">Authentication Security</p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:32px;color:#e4e4e7;font-size:15px;line-height:1.6;">
+              <p style="margin:0 0 16px;color:#ffffff;font-size:16px;font-weight:600;">Hello,</p>
+              <p style="margin:0 0 24px;color:#a1a1aa;font-size:14px;line-height:1.6;">
+                You requested a verification code to sign in to your <strong>Krishna AI</strong> account. Enter the single-use code below to complete authentication:
+              </p>
+
+              <!-- OTP Display Box -->
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin:24px 0;">
+                <tr>
+                  <td align="center" style="background-color:#160f2e;border:1px solid #3d2b75;border-radius:16px;padding:28px 20px;text-align:center;">
+                    <div style="font-size:11px;color:#a78bfa;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;">Verification Code</div>
+                    <div style="font-family:'Courier New',Courier,monospace;font-size:38px;font-weight:700;color:#ffffff;letter-spacing:12px;margin:8px 0 12px;padding-left:12px;">{otp}</div>
+                    <div style="font-size:12px;color:#71717a;font-weight:500;">⏱ Expires in <strong style="color:#a78bfa;">{expiry_mins} minutes</strong> &bull; Single-use only</div>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Security Warning Box -->
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-top:24px;">
+                <tr>
+                  <td style="background-color:rgba(245,158,11,0.08);border-left:3px solid #f59e0b;border-radius:6px;padding:14px 16px;">
+                    <p style="margin:0;font-size:13px;color:#d1d5db;line-height:1.5;">
+                      <strong>🔒 Security Warning:</strong> Never share this code with anyone. Krishna AI support will never ask for your code via phone, email, or chat.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:24px 0 0;font-size:13px;color:#71717a;line-height:1.5;">
+                If you did not request this verification code, no action is needed. Your account remains secure.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#080512;padding:24px 32px;border-top:1px solid #1c1436;text-align:center;font-size:12px;color:#71717a;line-height:1.6;">
+              <p style="margin:0 0 6px;color:#a1a1aa;font-weight:500;">Krishna AI &bull; Created by Prayuktha Kanchi</p>
+              <p style="margin:0 0 8px;font-size:11px;color:#52525b;">This is an automated security message. Please do not reply to this email.</p>
+              <p style="margin:0;font-size:11px;color:#3f3f46;">&copy; 2026 Krishna AI. All rights reserved.</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+"""
+
     msg.attach(MIMEText(plain, "plain"))
     msg.attach(MIMEText(html_body, "html"))
 
