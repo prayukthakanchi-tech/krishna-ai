@@ -438,21 +438,26 @@ section[data-testid="stSidebar"] {
     background: rgba(255,255,255,0.08) !important;
 }
 
-/* Primary (Login) button → purple */
+/* Primary (Login) button → Premium Purple Gradient */
 button[data-testid="baseButton-primary"],
 .stButton > button[kind="primary"] {
-    background: linear-gradient(135deg, #6d28d9 0%, #a78bfa 100%) !important;
+    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%) !important;
     color: #ffffff !important;
     border: none !important;
     font-weight: 600 !important;
+    font-size: 15px !important;
+    height: 48px !important;
+    border-radius: 14px !important;
     letter-spacing: 0.3px !important;
-    box-shadow: 0 4px 20px rgba(109,40,217,0.4) !important;
+    box-shadow: 0 8px 25px rgba(124, 58, 237, 0.35) !important;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 button[data-testid="baseButton-primary"]:hover,
 .stButton > button[kind="primary"]:hover {
-    background: linear-gradient(135deg, #7c3aed 0%, #c4b5fd 100%) !important;
-    box-shadow: 0 8px 30px rgba(109,40,217,0.55) !important;
+    background: linear-gradient(135deg, #8b5cf6 0%, #ddd6fe 100%) !important;
+    box-shadow: 0 12px 35px rgba(124, 58, 237, 0.5) !important;
     transform: translateY(-2px) !important;
+    color: #0b0718 !important;
 }
 
 /* Danger (confirm delete) button → red */
@@ -467,17 +472,23 @@ button[data-testid="baseButton-primary"]:hover,
     color: #fff !important;
 }
 
-/* Send OTP button → purple outline */
+/* Send OTP button → Glass Purple Button */
 .send-otp-btn > div > button {
-    background: rgba(109,40,217,0.15) !important;
-    border: 1px solid rgba(167,139,250,0.4) !important;
-    color: #c4b5fd !important;
+    background: linear-gradient(135deg, rgba(167,139,250,0.12) 0%, rgba(124,58,237,0.18) 100%) !important;
+    border: 1px solid rgba(167,139,250,0.3) !important;
+    color: #ddd6fe !important;
     font-weight: 600 !important;
+    font-size: 14px !important;
+    height: 44px !important;
+    border-radius: 14px !important;
+    transition: all 0.25s ease !important;
 }
 .send-otp-btn > div > button:hover {
-    background: rgba(109,40,217,0.28) !important;
+    background: linear-gradient(135deg, rgba(167,139,250,0.25) 0%, rgba(124,58,237,0.35) 100%) !important;
     border-color: #a78bfa !important;
-    color: #fff !important;
+    color: #ffffff !important;
+    box-shadow: 0 6px 20px rgba(167,139,250,0.25) !important;
+    transform: translateY(-1px) !important;
 }
 
 /* Sleek transparent delete button (no gray box container or border) */
@@ -685,7 +696,7 @@ def message_footer_html(ts: str, content: str, is_assistant: bool) -> str:
 
 
 # ─────────────────────────────────────────────
-# LOGIN FLOW
+# 🔐 LOGIN FLOW
 # ─────────────────────────────────────────────
 if "user" not in st.session_state:
 
@@ -694,64 +705,116 @@ if "user" not in st.session_state:
         st.error("⚠️ GROQ_API_KEY is not configured. Add it in Streamlit Cloud > Settings > Secrets.")
         st.stop()
 
+    # Login section specific CSS
+    st.markdown("""
+    <style>
+    /* Card wrapper around the center column */
+    [data-testid="column"]:nth-child(2) > div:first-child {
+        background: rgba(13, 17, 28, 0.75) !important;
+        border: 1px solid rgba(167, 139, 250, 0.22) !important;
+        border-radius: 20px !important;
+        padding: 32px 36px 36px !important;
+        backdrop-filter: blur(24px) saturate(180%) !important;
+        -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+        box-shadow:
+            0 24px 60px rgba(0, 0, 0, 0.6),
+            0 0 50px rgba(167, 139, 250, 0.12),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+    }
+    
+    /* Logo container - removes harsh borders and blends naturally */
+    .logo-container {
+        position: relative;
+        width: 105px;
+        height: 105px;
+        margin: 0 auto 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .logo-container::before {
+        content: '';
+        position: absolute;
+        inset: -8px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(167, 139, 250, 0.35) 0%, rgba(124, 58, 237, 0.1) 60%, transparent 80%);
+        animation: aura-pulse 3.5s ease-in-out infinite alternate;
+        z-index: 0;
+    }
+    @keyframes aura-pulse {
+        0% { transform: scale(0.95); opacity: 0.6; }
+        100% { transform: scale(1.1); opacity: 1; }
+    }
+    .logo-img {
+        position: relative;
+        width: 95px;
+        height: 95px;
+        border-radius: 50%;
+        object-fit: cover;
+        z-index: 1;
+        mix-blend-mode: lighten;
+        filter: drop-shadow(0 0 20px rgba(167, 139, 250, 0.6));
+    }
+    
+    /* Login labels */
+    .login-field-label {
+        color: #a1a1aa !important;
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.8px !important;
+        margin: 14px 0 6px !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     _, col, _ = st.columns([1, 1.4, 1])
     with col:
         icon_html = (
-            f"<img src='{KRISHNA_ICON}' width='90' "
-            "style='border-radius:50%;"
-            "box-shadow:0 0 40px rgba(167,139,250,0.55),0 0 80px rgba(88,28,135,0.25);"
-            "border:2px solid rgba(167,139,250,0.3);"
-            "display:block;margin:0 auto 14px;' alt='Krishna'/>"
+            f"<div class='logo-container'>"
+            f"<img src='{KRISHNA_ICON}' class='logo-img' alt='Krishna AI'/>"
+            f"</div>"
         ) if KRISHNA_ICON else "<div style='font-size:64px;text-align:center;margin-bottom:14px;'>🦚</div>"
 
         st.markdown(f"""
-        <div style='text-align:center;padding:28px 0 20px;'>
+        <div style='text-align:center;padding:12px 0 24px;'>
             {icon_html}
-            <h1 style='color:#a78bfa;margin:0 0 4px;font-size:28px;
-                       font-weight:700;letter-spacing:-0.3px;'>Krishna AI</h1>
-            <p style='color:#3a3a5c;font-size:12px;margin:0;
-                      letter-spacing:1px;text-transform:uppercase;'>Your divine companion</p>
+            <h1 style='color:#ffffff;margin:0 0 6px;font-size:30px;
+                       font-weight:700;letter-spacing:-0.5px;
+                       background: linear-gradient(135deg, #ffffff 0%, #c4b5fd 100%);
+                       -webkit-background-clip: text;
+                       -webkit-text-fill-color: transparent;'>Krishna AI</h1>
+            <p style='color:#a78bfa;font-size:11px;margin:0;
+                      letter-spacing:1.5px;font-weight:600;text-transform:uppercase;'>
+                Wisdom &nbsp;·&nbsp; Clarity &nbsp;·&nbsp; Peace
+            </p>
         </div>
         """, unsafe_allow_html=True)
 
-        # Card via CSS targeting the column
-        st.markdown("""
-        <style>
-        [data-testid="column"]:nth-child(2) > div:first-child {
-            background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(167,139,250,0.03) 100%) !important;
-            border: 1px solid rgba(167,139,250,0.18) !important;
-            border-radius: 24px !important;
-            padding: 8px 28px 28px !important;
-            backdrop-filter: blur(32px) !important;
-            box-shadow: 0 32px 80px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.07) !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
         # ── Email field ──
-        st.markdown("<p style='color:#777;font-size:11px;letter-spacing:0.8px;"
-                    "text-transform:uppercase;margin:4px 0;'>Email</p>",
-                    unsafe_allow_html=True)
-        email = st.text_input("Email", placeholder="you@example.com",
+        st.markdown("<div class='login-field-label'><span>✉️</span> EMAIL ADDRESS</div>", unsafe_allow_html=True)
+        email = st.text_input("Email", placeholder="name@domain.com",
                               label_visibility="collapsed", key="login_email")
 
         # ── Send OTP ──
         can_send, cooldown_left = otp_can_send(email.strip().lower()) if is_valid_email(email) else (True, 0)
-        send_label = "Send OTP" if can_send else f"Resend in {cooldown_left}s"
+        send_label = "✉️  Send Verification OTP" if can_send else f"⏱  Resend Code in {cooldown_left}s"
 
         st.markdown('<div class="send-otp-btn">', unsafe_allow_html=True)
         if st.button(send_label, disabled=not can_send, use_container_width=True):
             if not is_valid_email(email):
-                st.error("Enter a valid email address.")
+                st.error("Please enter a valid email address.")
             else:
-                with st.spinner("Sending OTP..."):
+                with st.spinner("Generating & sending security code..."):
                     otp = generate_otp(6)
                     ok, err = send_otp_email(email.strip().lower(), otp)
                 if ok:
                     otp_create(email.strip().lower(), otp)
-                    st.success(f"OTP sent to **{email}** — valid for 5 minutes.")
+                    st.success(f"Verification code sent to **{email}**. Valid for 5 minutes.")
                 else:
-                    st.error(f"Failed: {err}")
+                    st.error(f"Failed to send email: {err}")
         st.markdown("</div>", unsafe_allow_html=True)
 
         # Timer for current OTP
@@ -759,22 +822,20 @@ if "user" not in st.session_state:
             rem = otp_remaining_seconds(email.strip().lower())
             if rem > 0:
                 st.markdown(
-                    f"<p style='font-size:11px;color:#4a4a6a;text-align:right;margin:4px 0 0;'>"
-                    f"⏱ {rem}s remaining</p>", unsafe_allow_html=True
+                    f"<p style='font-size:11px;color:#a78bfa;text-align:right;margin:6px 0 0;font-weight:500;'>"
+                    f"⏱ {rem}s until code expires</p>", unsafe_allow_html=True
                 )
 
-        st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
-        st.markdown("<hr style='border:none;border-top:1px solid rgba(255,255,255,0.06);margin:4px 0 12px;'>",
+        st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
+        st.markdown("<hr style='border:none;border-top:1px solid rgba(255,255,255,0.08);margin:8px 0 16px;'>",
                     unsafe_allow_html=True)
 
         # ── OTP input ──
-        st.markdown("<p style='color:#777;font-size:11px;letter-spacing:0.8px;"
-                    "text-transform:uppercase;margin:4px 0;'>OTP Code</p>",
-                    unsafe_allow_html=True)
+        st.markdown("<div class='login-field-label'><span>🔑</span> VERIFICATION CODE</div>", unsafe_allow_html=True)
         otp_input = st.text_input("OTP Code", max_chars=6, placeholder="Enter 6-digit code",
                                   label_visibility="collapsed", key="otp_input")
 
-        if st.button("Login  →", use_container_width=True, type="primary"):
+        if st.button("Sign In to Krishna AI  →", use_container_width=True, type="primary"):
             success, err_msg = otp_verify(email.strip().lower(), otp_input)
             if success:
                 st.session_state.user       = email.strip().lower()
