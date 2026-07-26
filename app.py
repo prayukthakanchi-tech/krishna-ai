@@ -231,17 +231,52 @@ section[data-testid="stSidebar"] > div {
     background: rgba(255,255,255,0.06) !important;
 }
 
-/* ── Buttons ── */
+/* ── ALL buttons base ── */
 .stButton > button {
-    border-radius: 10px !important;
+    border-radius: 12px !important;
     font-weight: 500 !important;
+    font-size: 14px !important;
     transition: all 0.2s ease !important;
     border: 1px solid rgba(255,255,255,0.08) !important;
+    background: rgba(255,255,255,0.05) !important;
+    color: #e8eaf0 !important;
 }
 .stButton > button:hover {
     transform: translateY(-1px) !important;
-    box-shadow: 0 6px 24px rgba(167,139,250,0.25) !important;
-    border-color: rgba(167,139,250,0.3) !important;
+    box-shadow: 0 6px 24px rgba(167,139,250,0.2) !important;
+    border-color: rgba(167,139,250,0.25) !important;
+    background: rgba(255,255,255,0.08) !important;
+}
+
+/* ── Primary (Login) button → purple ── */
+button[data-testid="baseButton-primary"],
+.stButton > button[kind="primary"] {
+    background: linear-gradient(135deg, #6d28d9 0%, #a78bfa 100%) !important;
+    color: #ffffff !important;
+    border: none !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.3px !important;
+    box-shadow: 0 4px 20px rgba(109,40,217,0.4) !important;
+}
+button[data-testid="baseButton-primary"]:hover,
+.stButton > button[kind="primary"]:hover {
+    background: linear-gradient(135deg, #7c3aed 0%, #c4b5fd 100%) !important;
+    box-shadow: 0 8px 30px rgba(109,40,217,0.55) !important;
+    transform: translateY(-2px) !important;
+}
+
+/* ── Send OTP button → purple outline ── */
+.send-otp-btn > div > button {
+    background: rgba(109,40,217,0.15) !important;
+    border: 1px solid rgba(167,139,250,0.4) !important;
+    color: #c4b5fd !important;
+    font-weight: 600 !important;
+}
+.send-otp-btn > div > button:hover {
+    background: rgba(109,40,217,0.28) !important;
+    border-color: #a78bfa !important;
+    color: #fff !important;
+    box-shadow: 0 4px 20px rgba(109,40,217,0.3) !important;
 }
 
 /* ── Delete button ── */
@@ -274,7 +309,8 @@ section[data-testid="stSidebar"] > div {
     box-shadow: 0 0 0 3px rgba(167,139,250,0.15) !important;
     background: rgba(255,255,255,0.08) !important;
 }
-.stTextInput input::placeholder { color: #444 !important; }
+.stTextInput input::placeholder { color: #3a3a4a !important; }
+.stTextInput label { color: #555 !important; font-size: 12px !important; }
 
 /* ── Chat input ── */
 .stChatInputContainer {
@@ -286,19 +322,6 @@ section[data-testid="stSidebar"] > div {
 
 /* ── Spinner ── */
 .stSpinner { color: #a78bfa !important; }
-
-/* ── Glassmorphism card (login) ── */
-.glass-card {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 24px;
-    padding: 40px 36px;
-    backdrop-filter: blur(24px);
-    box-shadow:
-        0 0 0 1px rgba(167,139,250,0.06),
-        0 24px 80px rgba(0,0,0,0.5),
-        0 0 60px rgba(88,28,135,0.08);
-}
 
 /* ── Message timestamp ── */
 .msg-timestamp {
@@ -432,47 +455,71 @@ if "user" not in st.session_state:
         if key not in st.session_state:
             st.session_state[key] = default
 
-    # ── Centered layout ──
-    _, col, _ = st.columns([1, 1.6, 1])
+    # ── Centered 3-column layout ──
+    _, col, _ = st.columns([1, 1.4, 1])
     with col:
 
-        # Krishna icon
+        # ── Krishna icon above card ──
         icon_html = (
-            f"<img src='{KRISHNA_ICON}' width='96' "
+            f"<img src='{KRISHNA_ICON}' width='90' "
             "style='border-radius:50%;"
-            "box-shadow:0 0 50px rgba(167,139,250,0.5),0 0 100px rgba(88,28,135,0.25);"
-            "border:2px solid rgba(167,139,250,0.25);"
-            "margin-bottom:16px;display:block;margin-left:auto;margin-right:auto;'"
+            "box-shadow:0 0 40px rgba(167,139,250,0.55),0 0 80px rgba(88,28,135,0.25);"
+            "border:2px solid rgba(167,139,250,0.3);"
+            "display:block;margin:0 auto 14px;'"
             " alt='Krishna'/>"
-        ) if KRISHNA_ICON else "<div style='font-size:72px;text-align:center;'>🦚</div>"
+        ) if KRISHNA_ICON else "<div style='font-size:64px;text-align:center;margin-bottom:14px;'>🦚</div>"
 
         st.markdown(f"""
-        <div style='text-align:center;padding:32px 0 24px;'>
+        <div style='text-align:center;padding:28px 0 20px;'>
             {icon_html}
-            <h1 style='color:#a78bfa;margin:0 0 4px;font-size:30px;
-                       font-weight:700;letter-spacing:-0.5px;'>Krishna AI</h1>
-            <p style='color:#444;font-size:13px;margin:0;'>Your divine companion</p>
+            <h1 style='color:#a78bfa;margin:0 0 4px;font-size:28px;
+                       font-weight:700;letter-spacing:-0.3px;'>Krishna AI</h1>
+            <p style='color:#3a3a5c;font-size:12px;margin:0;
+                      letter-spacing:1px;text-transform:uppercase;'>Your divine companion</p>
         </div>
         """, unsafe_allow_html=True)
 
-        # Glass card
-        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
+        # ── Glassmorphism card — built entirely in HTML/CSS ──
+        # Avoids Streamlit phantom div bug by NOT opening a raw <div> around widgets
+        st.markdown("""
+        <style>
+        /* Card wrapper around the login column */
+        [data-testid="column"]:nth-child(2) > div:first-child {
+            background: linear-gradient(135deg,
+                rgba(255,255,255,0.05) 0%,
+                rgba(167,139,250,0.03) 100%) !important;
+            border: 1px solid rgba(167,139,250,0.18) !important;
+            border-radius: 24px !important;
+            padding: 8px 28px 28px !important;
+            backdrop-filter: blur(32px) !important;
+            -webkit-backdrop-filter: blur(32px) !important;
+            box-shadow:
+                0 0 0 1px rgba(167,139,250,0.06),
+                0 32px 80px rgba(0,0,0,0.6),
+                inset 0 1px 0 rgba(255,255,255,0.07) !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
 
+        # ── Email field ──
+        st.markdown("<p style='color:#555;font-size:11px;letter-spacing:0.8px;"
+                    "text-transform:uppercase;margin:4px 0 4px;'>Email</p>",
+                    unsafe_allow_html=True)
         email = st.text_input("Email", placeholder="you@example.com",
                               label_visibility="collapsed", key="login_email")
 
-        # Cooldown logic
+        # ── Send OTP button ──
         elapsed_since_send = time.time() - (st.session_state.last_otp_send or 0)
         cooldown_left = max(0, int(OTP_RESEND_COOLDOWN - elapsed_since_send))
         can_send = cooldown_left == 0
+        send_label = "Send OTP" if can_send else f"Resend in {cooldown_left}s"
 
-        send_label = "Send OTP" if can_send else f"  Resend in {cooldown_left}s"
-
+        st.markdown('<div class="send-otp-btn">', unsafe_allow_html=True)
         if st.button(send_label, disabled=not can_send, use_container_width=True):
             if not is_valid_email(email):
                 st.error("Enter a valid email address.")
             else:
-                with st.spinner("Sending..."):
+                with st.spinner("Sending OTP..."):
                     otp = generate_otp(6)
                     ok, err = send_otp_email(email, otp)
                 if ok:
@@ -484,25 +531,34 @@ if "user" not in st.session_state:
                     st.success(f"OTP sent to **{email}** — valid for 5 minutes.")
                 else:
                     st.error(f"Failed: {err}")
+        st.markdown('</div>', unsafe_allow_html=True)
 
+        # OTP timer
         if st.session_state.otp_time:
             rem = max(0, int(OTP_EXPIRY_SECONDS - (time.time() - st.session_state.otp_time)))
-            if rem > 0:
-                st.caption(f"⏱ Code valid for {rem}s")
-            else:
-                st.caption("⏰ Code expired — request a new one.")
+            st.markdown(
+                f"<p style='font-size:11px;color:#4a4a6a;text-align:right;margin:4px 0 0;'>"
+                f"{'⏱ ' + str(rem) + 's remaining' if rem > 0 else '⏰ Expired'}</p>",
+                unsafe_allow_html=True
+            )
 
-        st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
+        st.markdown("<hr style='border:none;border-top:1px solid rgba(255,255,255,0.06);margin:4px 0 12px;'>",
+                    unsafe_allow_html=True)
 
-        # Lockout check
+        # ── OTP field ──
         if st.session_state.otp_attempts >= OTP_MAX_ATTEMPTS:
             st.error("Too many failed attempts. Request a new OTP.")
             st.session_state.otp = None
             st.session_state.otp_attempts = 0
         else:
-            otp_input = st.text_input("OTP Code", max_chars=6, placeholder="6-digit code",
+            st.markdown("<p style='color:#555;font-size:11px;letter-spacing:0.8px;"
+                        "text-transform:uppercase;margin:4px 0 4px;'>OTP Code</p>",
+                        unsafe_allow_html=True)
+            otp_input = st.text_input("OTP Code", max_chars=6, placeholder="Enter 6-digit code",
                                       label_visibility="collapsed", key="otp_input")
 
+            # ── Login button — purple primary ──
             if st.button("Login  →", use_container_width=True, type="primary"):
                 if not st.session_state.otp:
                     st.error("Request an OTP first.")
@@ -522,8 +578,6 @@ if "user" not in st.session_state:
                     st.session_state.otp_time      = None
                     st.session_state.otp_attempts  = 0
                     st.rerun()
-
-        st.markdown("</div>", unsafe_allow_html=True)
 
     st.stop()
 
