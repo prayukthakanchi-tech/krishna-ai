@@ -113,19 +113,8 @@ def get_krishna_icon() -> str:
         return ""
 
 
-def get_login_bg() -> str:
-    """Load abstract wave background image as base64."""
-    try:
-        with open("static/login_bg.png", "rb") as f:
-            data = base64.b64encode(f.read()).decode()
-        return f"data:image/png;base64,{data}"
-    except FileNotFoundError:
-        return ""
-
-
 GROQ_CLIENT  = get_groq_client()
 KRISHNA_ICON = get_krishna_icon()
-LOGIN_BG     = get_login_bg()
 
 
 # ─────────────────────────────────────────────
@@ -806,43 +795,30 @@ if "user" not in st.session_state:
         st.error("⚠️ GROQ_API_KEY is not configured. Add it in Streamlit Cloud > Settings > Secrets.")
         st.stop()
 
-    # Login section specific CSS — Matches attached inspiration screenshot
-    bg_style = f"background: url('{LOGIN_BG}') center/cover no-repeat fixed !important;" if LOGIN_BG else "background: #05080f !important;"
-
-    st.markdown(f"""
+    # Login section specific CSS — Original dark ambient theme
+    st.markdown("""
     <style>
-    /* Full Page Abstract Wave Background */
-    .stApp {{
-        {bg_style}
-    }}
+    /* Revert to original dark background */
+    .stApp {
+        background: #05080f !important;
+    }
 
-    /* Dark Overlay for readability */
-    .stApp::before {{
-        content: '';
-        position: fixed;
-        inset: 0;
-        background: rgba(5, 5, 12, 0.45);
-        backdrop-filter: blur(4px);
-        z-index: 0;
-        pointer-events: none;
-    }}
-
-    /* Centered Glass Container matching attached image */
-    [data-testid="column"]:nth-child(2) > div:first-child {{
+    /* Centered Glass Container */
+    [data-testid="column"]:nth-child(2) > div:first-child {
         position: relative;
         z-index: 10;
-        background: rgba(12, 12, 22, 0.48) !important;
-        border: 1.5px solid rgba(255, 255, 255, 0.35) !important;
+        background: rgba(13, 17, 28, 0.85) !important;
+        border: 1px solid rgba(167, 139, 250, 0.22) !important;
         border-radius: 20px !important;
-        padding: 40px 42px 42px !important;
-        backdrop-filter: blur(28px) saturate(180%) !important;
-        -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
+        padding: 36px 40px 40px !important;
+        backdrop-filter: blur(24px) saturate(180%) !important;
+        -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
         box-shadow:
-            0 25px 70px rgba(0, 0, 0, 0.7),
-            0 0 40px rgba(255, 255, 255, 0.08),
-            inset 0 1px 1px rgba(255, 255, 255, 0.3) !important;
+            0 24px 60px rgba(0, 0, 0, 0.6),
+            0 0 50px rgba(167, 139, 250, 0.12),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
         animation: glassFadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) ease-out !important;
-    }}
+    }
 
     @keyframes glassFadeIn {{
         from {{ opacity: 0; transform: translateY(20px) scale(0.98); }}
