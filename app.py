@@ -1088,9 +1088,17 @@ if "user" not in st.session_state:
 
         # ── Primary Login Button ──
         if st.button("Login to Krishna AI  →", use_container_width=True, type="primary"):
-            success, err_msg = otp_verify(email.strip().lower(), otp_input)
+            cleaned_email = email.strip().lower()
+            success, err_msg = otp_verify(cleaned_email, otp_input)
             if success:
-                st.session_state.user       = email.strip().lower()
+                c_path = get_path(cleaned_email, "chats")
+                is_new_user = not os.path.exists(c_path)
+                if is_new_user:
+                    st.session_state.welcome_msg = "🎉 Welcome to Krishna AI! Your account has been created successfully."
+                else:
+                    st.session_state.welcome_msg = "Welcome back!"
+
+                st.session_state.user       = cleaned_email
                 st.session_state.chat_id    = None
                 st.session_state.login_time = time.time()
                 st.session_state.chats      = None   # lazy load flag
@@ -1099,10 +1107,10 @@ if "user" not in st.session_state:
             else:
                 st.error(err_msg)
 
-        # ── Don't Have An Account? Register ──
+        # ── Passwordless Onboarding Hint ──
         st.markdown(
-            f"<div style='text-align:center;margin-top:22px;font-size:14px;color:#a1a1aa;font-weight:400;letter-spacing:-0.2px;'>"
-            f"Don't have an account? <span class='register-link'>Register</span>"
+            f"<div style='text-align:center;margin-top:22px;font-size:13px;color:#a1a1aa;font-weight:400;letter-spacing:-0.2px;line-height:1.5;'>"
+            f"First time here?<br><span style='color:rgba(255,255,255,0.7);font-weight:500;'>Just verify your email to get started.</span>"
             f"</div>",
             unsafe_allow_html=True
         )
@@ -1121,6 +1129,10 @@ if "user" not in st.session_state:
 # ─────────────────────────────────────────────
 user_email  = st.session_state.user
 safe_email  = escape_for_html(user_email)
+
+# Welcome Toast Notification
+if "welcome_msg" in st.session_state:
+    st.toast(st.session_state.pop("welcome_msg"), icon="✨")
 
 chat_path   = get_path(user_email, "chats")
 
