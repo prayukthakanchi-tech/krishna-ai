@@ -1055,13 +1055,16 @@ if user_msg:
     reply = ""
 
     try:
-        if not GROQ_CLIENT:
-            raise RuntimeError("Groq client not initialized — check GROQ_API_KEY.")
+        # Clean messages for Groq API payload (removes unsupported keys like timestamp/is_error)
+        api_messages = [
+            {"role": m["role"], "content": m["content"]}
+            for m in messages[-MAX_CHAT_HISTORY:]
+            if not m.get("is_error") and m.get("content")
+        ]
 
-        truncated = messages[-MAX_CHAT_HISTORY:]
         stream = GROQ_CLIENT.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=[{"role": "system", "content": build_prompt(memory)}] + truncated,
+            messages=[{"role": "system", "content": build_prompt(memory)}] + api_messages,
             max_tokens=800,
             temperature=0.7,
             stream=True,
