@@ -803,25 +803,25 @@ if "user" not in st.session_state:
         background: #05080f !important;
     }
 
-    /* PHASE 1: GLASS AUTHENTICATION CARD CONTAINER SPECIFICATION */
+    /* PHASE 1 REDO: PREMIUM GLASS AUTHENTICATION CARD CONTAINER */
     div[data-testid="stColumn"]:nth-child(2) > div:first-child,
     div[data-testid="column"]:nth-child(2) > div:first-child,
     div.stColumn:nth-child(2) > div:first-child {
         position: relative !important;
         z-index: 10 !important;
         width: 100% !important;
-        max-width: 480px !important;
+        max-width: 500px !important;
         margin: 0 auto !important;
-        background: rgba(18, 14, 32, 0.75) !important;
-        border: 1px solid rgba(255, 255, 255, 0.15) !important;
+        background: rgba(18, 14, 32, 0.58) !important;
+        border: 1.5px solid rgba(167, 139, 250, 0.42) !important;
         border-radius: 24px !important;
-        padding: 48px !important;
-        backdrop-filter: blur(35px) saturate(180%) !important;
-        -webkit-backdrop-filter: blur(35px) saturate(180%) !important;
+        padding: 34px 44px 28px !important;
+        backdrop-filter: blur(35px) saturate(190%) !important;
+        -webkit-backdrop-filter: blur(35px) saturate(190%) !important;
         box-shadow:
-            0 30px 70px rgba(0, 0, 0, 0.8),
-            0 0 55px rgba(124, 58, 237, 0.25),
-            inset 0 1px 1px rgba(255, 255, 255, 0.15) !important;
+            0 25px 65px rgba(0, 0, 0, 0.8),
+            0 0 60px rgba(167, 139, 250, 0.3),
+            inset 0 1.5px 1px rgba(255, 255, 255, 0.2) !important;
         animation: cardFadeIn 0.5s ease-out !important;
     }
 
@@ -830,8 +830,8 @@ if "user" not in st.session_state:
         div[data-testid="stColumn"]:nth-child(2) > div:first-child,
         div[data-testid="column"]:nth-child(2) > div:first-child,
         div.stColumn:nth-child(2) > div:first-child {
-            max-width: 420px !important;
-            padding: 36px 28px !important;
+            max-width: 440px !important;
+            padding: 28px 30px !important;
         }
     }
 
@@ -840,7 +840,7 @@ if "user" not in st.session_state:
         div[data-testid="column"]:nth-child(2) > div:first-child,
         div.stColumn:nth-child(2) > div:first-child {
             width: calc(100% - 32px) !important;
-            padding: 28px 20px !important;
+            padding: 24px 20px !important;
         }
     }
 
@@ -975,7 +975,7 @@ if "user" not in st.session_state:
     """, unsafe_allow_html=True)
 
     # ── Glassmorphism Authentication Card ──
-    _, col, _ = st.columns([1, 1.4, 1])
+    _, col, _ = st.columns([1, 2.2, 1])
     with col:
         # Card Header inside card matching reference mockup
         st.markdown("""
