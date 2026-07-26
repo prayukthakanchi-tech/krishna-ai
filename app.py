@@ -803,30 +803,30 @@ if "user" not in st.session_state:
         background: #05080f !important;
     }
 
-    /* Centered Glass Container */
+    /* Centered Glassmorphism Authentication Card (Matches Reference Image) */
     [data-testid="column"]:nth-child(2) > div:first-child {
         position: relative;
         z-index: 10;
-        background: rgba(13, 17, 28, 0.85) !important;
-        border: 1px solid rgba(167, 139, 250, 0.22) !important;
-        border-radius: 20px !important;
-        padding: 36px 40px 40px !important;
-        backdrop-filter: blur(24px) saturate(180%) !important;
-        -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+        background: rgba(255, 255, 255, 0.08) !important;
+        border: 1px solid rgba(255, 255, 255, 0.35) !important;
+        border-radius: 22px !important;
+        padding: 38px 42px 42px !important;
+        backdrop-filter: blur(30px) saturate(180%) !important;
+        -webkit-backdrop-filter: blur(30px) saturate(180%) !important;
         box-shadow:
-            0 24px 60px rgba(0, 0, 0, 0.6),
-            0 0 50px rgba(167, 139, 250, 0.12),
-            inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
-        animation: glassFadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) ease-out !important;
+            0 25px 65px rgba(0, 0, 0, 0.65),
+            0 0 40px rgba(255, 255, 255, 0.08),
+            inset 0 1px 1px rgba(255, 255, 255, 0.3) !important;
+        animation: glassCardFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) ease-out !important;
     }
 
-    @keyframes glassFadeIn {{
-        from {{ opacity: 0; transform: translateY(20px) scale(0.98); }}
-        to {{ opacity: 1; transform: translateY(0) scale(1); }}
-    }}
+    @keyframes glassCardFadeIn {
+        from { opacity: 0; transform: translateY(18px) scale(0.98); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+    }
 
     /* Logo Aura Pulse */
-    .logo-container {{
+    .logo-container {
         position: relative;
         width: 120px;
         height: 120px;
@@ -834,8 +834,8 @@ if "user" not in st.session_state:
         display: flex;
         align-items: center;
         justify-content: center;
-    }}
-    .logo-container::before {{
+    }
+    .logo-container::before {
         content: '';
         position: absolute;
         inset: -10px;
@@ -843,12 +843,12 @@ if "user" not in st.session_state:
         background: radial-gradient(circle, rgba(167, 139, 250, 0.45) 0%, rgba(124, 58, 237, 0.15) 60%, transparent 85%);
         animation: aura-pulse 3.5s ease-in-out infinite alternate;
         z-index: 0;
-    }}
-    @keyframes aura-pulse {{
-        0% {{ transform: scale(0.95); opacity: 0.6; }}
-        100% {{ transform: scale(1.12); opacity: 1; }}
-    }}
-    .logo-img {{
+    }
+    @keyframes aura-pulse {
+        0% { transform: scale(0.95); opacity: 0.6; }
+        100% { transform: scale(1.12); opacity: 1; }
+    }
+    .logo-img {
         position: relative;
         width: 110px;
         height: 110px;
@@ -857,19 +857,19 @@ if "user" not in st.session_state:
         z-index: 1;
         mix-blend-mode: lighten;
         filter: drop-shadow(0 0 25px rgba(167, 139, 250, 0.75));
-    }}
+    }
 
-    /* Clean Labels matching reference image */
-    .login-field-label {{
+    /* Field Labels */
+    .login-field-label {
         color: #ffffff !important;
         font-size: 14px !important;
         font-weight: 500 !important;
         letter-spacing: 0.2px !important;
         margin: 20px 0 4px !important;
-    }}
+    }
 
     /* Underline Input Style matching reference screenshot */
-    .stTextInput input {{
+    .stTextInput input {
         background: transparent !important;
         border: none !important;
         border-bottom: 1.5px solid rgba(255, 255, 255, 0.75) !important;
