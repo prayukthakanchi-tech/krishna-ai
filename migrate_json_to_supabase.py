@@ -45,9 +45,10 @@ def run_migration():
         print("No data/ directory found. Nothing to migrate.")
         return
 
-    files = [f for f in os.listdir(DATA_DIR) if f.endswith("_chats.json")]
+    # Filter files: ignore derived backup files containing '_user.local'
+    files = [f for f in os.listdir(DATA_DIR) if f.endswith("_chats.json") and "_user.local" not in f]
     if not files:
-        print("No _chats.json files found in data/ directory.")
+        print("No original _chats.json files found in data/ directory.")
         return
 
     total_files = len(files)
@@ -59,10 +60,10 @@ def run_migration():
     for filename in files:
         filepath = os.path.join(DATA_DIR, filename)
         
-        # Derive email from filename (e.g. prayukthakanchi_gmail_com_chats.json -> user email)
+        # Derive email from filename (e.g. usera_gmail.com_chats.json -> usera@gmail.com)
         raw_prefix = filename.replace("_chats.json", "")
-        # Reconstruct standard email if sanitized with underscores
-        email_guess = raw_prefix.replace("_gmail_com", "@gmail.com").replace("_yahoo_com", "@yahoo.com").replace("_outlook_com", "@outlook.com")
+        import re
+        email_guess = re.sub(r'^(.+)_([a-zA-Z0-9\-]+\.[a-zA-Z]{2,})$', r'\1@\2', raw_prefix)
         if "@" not in email_guess:
             email_guess = f"{raw_prefix}@user.local"
 
