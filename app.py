@@ -1489,16 +1489,25 @@ if user_msg:
             unsafe_allow_html=True
         )
 
-    # Save response (only persist successful LLM responses to disk JSON)
+    # Save response and update session state & disk
     if not api_error and reply:
         messages.append({
             "role": "assistant",
             "content": reply,
             "timestamp": now_str2,
         })
-        chats[current_cid] = messages
-        st.session_state.chats = chats
-        save_json_file(chat_path, chats)
+    elif api_error:
+        messages.append({
+            "role": "assistant",
+            "content": reply,
+            "timestamp": now_str2,
+            "is_error": True,
+        })
+
+    # Always persist conversation state so user prompts are never lost
+    chats[current_cid] = messages
+    st.session_state.chats = chats
+    save_json_file(chat_path, chats)
 
     st.rerun()
 
