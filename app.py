@@ -1436,14 +1436,34 @@ if user_msg:
             if not m.get("is_error") and m.get("content")
         ]
 
-        stream = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "system", "content": build_prompt()}] + api_messages,
-            max_tokens=800,
-            temperature=0.6,
-            top_p=0.9,
-            stream=True,
-        )
+        # Resilient model fallback for Groq API
+        GROQ_MODELS = [
+            "llama-3.3-70b-versatile",
+            "llama-3.1-70b-versatile",
+            "llama3-70b-8192",
+            "llama-3.1-8b-instant",
+        ]
+
+        stream = None
+        last_model_err = None
+        for m_name in GROQ_MODELS:
+            try:
+                stream = client.chat.completions.create(
+                    model=m_name,
+                    messages=[{"role": "system", "content": build_prompt()}] + api_messages,
+                    max_tokens=800,
+                    temperature=0.6,
+                    top_p=0.9,
+                    stream=True,
+                )
+                break
+            except Exception as me:
+                last_model_err = me
+                logger.warning(f"Groq Model {m_name} failed: {me}")
+                continue
+
+        if not stream:
+            raise last_model_err or RuntimeError("No Groq models available.")
 
         typing_slot.empty()
         chunks = []
