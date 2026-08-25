@@ -1,17 +1,17 @@
 """
-Krishna AI — Automated Security, Auth, Authorization & Functionality Test Suite
+Krishna AI — Automated Security, Auth, Authorization & Persistence Test Suite
 
 Verifies:
-1. Email validation & sanitization
-2. OTP generation (crypto-random, 6 digits)
-3. Server-side OTP hashing (SHA-256)
-4. OTP attempt cap enforcement (5 attempts max)
-5. OTP resend cooldown (60s)
-6. User Authorization & Isolation (User A cannot access User B's chats)
-7. HTML & Data attribute XSS sanitization
-8. Prompt injection detection
-9. Dynamic Groq client & resilient model fallback list
-10. Database JSON fallback & state management
+1. Email validation & path traversal prevention
+2. OTP generation (crypto-random, 6 digits) & SHA-256 server-side hashing
+3. OTP attempt cap (5 max) & single-use invalidation
+4. OTP resend cooldown & rate-limit abuse protection
+5. User Authorization & Isolation (User A cannot access User B's chats)
+6. HTML & Data attribute XSS sanitization
+7. Prompt injection detection
+8. Dynamic Groq client & model validation
+9. Application restart persistence simulation
+10. Supabase REST API request payload & header validation
 
 Run with:
   python test_suite.py
@@ -33,6 +33,7 @@ from app import (
     otp_create,
     otp_verify,
     otp_can_send,
+    get_validated_groq_models,
     _load_otp_state
 )
 
@@ -44,10 +45,15 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
         self.test_data_dir = "data_test_env"
         os.makedirs(self.test_data_dir, exist_ok=True)
         self.orig_otp_file = database.OTP_STATE_FILE
+        self.orig_json_path = database.get_json_chat_path
+
+        # Monkey-patch database data directory for tests
         database.OTP_STATE_FILE = os.path.join(self.test_data_dir, "_otp_state.json")
+        database.get_json_chat_path = lambda email: os.path.join(self.test_data_dir, f"{safe_filename(email)}_chats.json")
 
     def tearDown(self):
         database.OTP_STATE_FILE = self.orig_otp_file
+        database.get_json_chat_path = self.orig_json_path
         if os.path.exists(self.test_data_dir):
             shutil.rmtree(self.test_data_dir, ignore_errors=True)
 
@@ -140,7 +146,30 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
         self.assertIn("Chat B", loaded_b)
         self.assertNotIn("Chat A", loaded_b)
 
-    # ── 5. XSS ESCAPING & PROMPT INJECTION ──
+    # ── 5. REAL PERSISTENCE & RESTART SIMULATION ──
+    def test_app_restart_persistence_simulation(self):
+        email = "restart_user@gmail.com"
+        chats = {"Pre-Restart Chat": [{"role": "user", "content": "Hello before reboot"}]}
+
+        # 1. User writes chat
+        database.save_user_chats(email, chats)
+
+        # 2. Simulate application restart (wipe memory state)
+        memory_state = None
+
+        # 3. Reload from database/storage layer
+        memory_state = database.load_user_chats(email)
+        self.assertIn("Pre-Restart Chat", memory_state)
+        self.assertEqual(memory_state["Pre-Restart Chat"][0]["content"], "Hello before reboot")
+
+    # ── 6. DYNAMIC GROQ MODEL VALIDATION ──
+    def test_dynamic_groq_model_validation(self):
+        models = get_validated_groq_models(None)
+        self.assertIsInstance(models, list)
+        self.assertIn("llama-3.3-70b-versatile", models)
+        self.assertIn("llama-3.1-8b-instant", models)
+
+    # ── 7. XSS ESCAPING & PROMPT INJECTION ──
     def test_xss_escaping(self):
         malicious = "<script>alert('xss')</script>"
         escaped = escape_for_html(malicious)

@@ -108,6 +108,33 @@ def get_groq_client():
         return None
 
 
+def get_validated_groq_models(client) -> list[str]:
+    """
+    Dynamically validate active models on Groq API.
+    Falls back to supported defaults if listing fails.
+    """
+    DEFAULT_MODELS = [
+        "llama-3.3-70b-versatile",
+        "llama-3.1-70b-versatile",
+        "llama3-70b-8192",
+        "llama-3.1-8b-instant",
+    ]
+    if not client:
+        return DEFAULT_MODELS
+
+    try:
+        models_res = client.models.list()
+        if hasattr(models_res, "data") and models_res.data:
+            active_ids = [m.id for m in models_res.data if hasattr(m, "id")]
+            valid_chain = [m for m in DEFAULT_MODELS if m in active_ids]
+            if valid_chain:
+                return valid_chain
+    except Exception as e:
+        logger.warning(f"Dynamic Groq model validation failed: {e}. Using default fallback list.")
+
+    return DEFAULT_MODELS
+
+
 @st.cache_resource
 def get_krishna_icon() -> str:
     """Load Krishna icon as base64 from disk."""
@@ -1430,13 +1457,8 @@ if user_msg:
             if not m.get("is_error") and m.get("content")
         ]
 
-        # Resilient model fallback for Groq API
-        GROQ_MODELS = [
-            "llama-3.3-70b-versatile",
-            "llama-3.1-70b-versatile",
-            "llama3-70b-8192",
-            "llama-3.1-8b-instant",
-        ]
+        # Dynamically validated model fallback chain
+        GROQ_MODELS = get_validated_groq_models(client)
 
         stream = None
         last_model_err = None
