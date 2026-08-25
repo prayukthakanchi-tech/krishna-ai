@@ -18,7 +18,10 @@ import json
 import logging
 import os
 import sys
+from dotenv import load_dotenv
 from database import is_supabase_enabled, save_user_chats, load_json_file, DATA_DIR
+
+load_dotenv()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("migration")
