@@ -1143,7 +1143,14 @@ chat_path   = get_path(user_email, "chats")
 # Load chats from disk only once per session — session_state is source of truth
 if st.session_state.get("chats") is None:
     loaded = load_json_file(chat_path)
-    st.session_state.chats = loaded if isinstance(loaded, dict) else {}
+    if isinstance(loaded, dict):
+        # Clean out stale error items from previous failed sessions
+        clean_chats = {}
+        for cid, msgs in loaded.items():
+            clean_chats[cid] = [m for m in msgs if not m.get("is_error")]
+        st.session_state.chats = clean_chats
+    else:
+        st.session_state.chats = {}
 
 chats = st.session_state.chats
 
@@ -1482,25 +1489,16 @@ if user_msg:
             unsafe_allow_html=True
         )
 
-    # Save response (UI-17: flag errors separately)
+    # Save response (only persist successful LLM responses to disk JSON)
     if not api_error and reply:
         messages.append({
             "role": "assistant",
             "content": reply,
             "timestamp": now_str2,
         })
-    elif api_error:
-        messages.append({
-            "role": "assistant",
-            "content": "Service temporarily unavailable.",
-            "timestamp": now_str2,
-            "is_error": True,
-        })
-
-    # Persist chat (BUG-04: session_state is source of truth)
-    chats[current_cid] = messages
-    st.session_state.chats = chats
-    save_json_file(chat_path, chats)
+        chats[current_cid] = messages
+        st.session_state.chats = chats
+        save_json_file(chat_path, chats)
 
     st.rerun()
 
