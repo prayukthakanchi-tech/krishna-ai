@@ -52,6 +52,7 @@ from email.mime.multipart import MIMEMultipart
 from groq import Groq
 from dotenv import load_dotenv
 import base64
+import database
 
 # ─────────────────────────────────────────────
 # CONFIG & SECRETS
@@ -1131,28 +1132,21 @@ if "user" not in st.session_state:
 # ─────────────────────────────────────────────
 # USER DATA  (session_state owns in-session data — BUG-04, BUG-06)
 # ─────────────────────────────────────────────
-user_email  = st.session_state.user
+user_email  = st.session_state.get("user", "")
 safe_email  = escape_for_html(user_email)
 
-# Welcome Toast Notification
-if "welcome_msg" in st.session_state:
-    st.toast(st.session_state.pop("welcome_msg"), icon="✨")
+if "user" in st.session_state and user_email:
+    # Welcome Toast Notification
+    if "welcome_msg" in st.session_state:
+        st.toast(st.session_state.pop("welcome_msg"), icon="✨")
 
-chat_path   = get_path(user_email, "chats")
+    # Load chats using database storage abstraction
+    if st.session_state.get("chats") is None:
+        st.session_state.chats = database.load_user_chats(user_email)
 
-# Load chats from disk only once per session — session_state is source of truth
-if st.session_state.get("chats") is None:
-    loaded = load_json_file(chat_path)
-    if isinstance(loaded, dict):
-        # Clean out stale error items from previous failed sessions
-        clean_chats = {}
-        for cid, msgs in loaded.items():
-            clean_chats[cid] = [m for m in msgs if not m.get("is_error")]
-        st.session_state.chats = clean_chats
-    else:
-        st.session_state.chats = {}
-
-chats = st.session_state.chats
+    chats = st.session_state.chats
+else:
+    chats = {}
 
 # Initialize default chat_id
 if not st.session_state.get("chat_id"):
@@ -1218,7 +1212,7 @@ with st.sidebar:
                         if st.session_state.chat_id == cid:
                             st.session_state.chat_id = None
                         st.session_state.chats = chats
-                        save_json_file(chat_path, chats)
+                        database.delete_user_chat(user_email, cid)
                         st.session_state.pop(confirm_key, None)
                         st.rerun()
                     st.markdown("</div>", unsafe_allow_html=True)
@@ -1527,7 +1521,7 @@ if user_msg:
     # Always persist conversation state so user prompts are never lost
     chats[current_cid] = messages
     st.session_state.chats = chats
-    save_json_file(chat_path, chats)
+    database.save_user_chats(user_email, chats)
 
     st.rerun()
 
