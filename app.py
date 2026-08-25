@@ -95,14 +95,19 @@ PASSWORD     = get_secret("PASSWORD")
 # ─────────────────────────────────────────────
 # CACHED RESOURCES  (shared across all sessions)
 # ─────────────────────────────────────────────
-@st.cache_resource
 def get_groq_client():
-    """Groq client — created once, reused across all sessions."""
-    if not GROQ_API_KEY:
+    """Get Groq client dynamically using current secret."""
+    key = get_secret("GROQ_API_KEY")
+    if not key:
         return None
-    return Groq(api_key=GROQ_API_KEY)
+    try:
+        return Groq(api_key=key)
+    except Exception as e:
+        logger.error(f"Failed to initialize Groq client: {e}")
+        return None
 
 
+@st.cache_resource
 def get_krishna_icon() -> str:
     """Load Krishna icon as base64 from disk."""
     try:
@@ -1413,6 +1418,10 @@ if user_msg:
     reply = ""
 
     try:
+        client = get_groq_client()
+        if not client:
+            raise ValueError("GROQ_API_KEY is not configured in Secrets.")
+
         # Clean messages for Groq API payload (removes unsupported keys like timestamp/is_error)
         api_messages = [
             {"role": m["role"], "content": m["content"]}
@@ -1420,7 +1429,7 @@ if user_msg:
             if not m.get("is_error") and m.get("content")
         ]
 
-        stream = GROQ_CLIENT.chat.completions.create(
+        stream = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "system", "content": build_prompt()}] + api_messages,
             max_tokens=800,
@@ -1455,13 +1464,17 @@ if user_msg:
         typing_slot.empty()
         api_error = True
 
+        err_str = str(e)
         err_type = type(e).__name__
-        if "RateLimit" in err_type or "429" in str(e):
+
+        if "GROQ_API_KEY" in err_str or "not configured" in err_str:
+            reply = "GROQ_API_KEY is missing. Please add your Groq API key in Streamlit Cloud Secrets."
+        elif "RateLimit" in err_type or "429" in err_str:
             reply = "Krishna AI is receiving high traffic right now. Please wait a moment."
-        elif "Authentication" in err_type or "401" in str(e):
-            reply = "Authentication error. Please check API key configuration."
+        elif "Authentication" in err_type or "401" in err_str or "invalid_api_key" in err_str:
+            reply = "Invalid Groq API key. Please check your GROQ_API_KEY in Streamlit Cloud Secrets."
         else:
-            reply = "Krishna is temporarily reflecting. Please ask your question again in a moment."
+            reply = f"Service Error: {err_str if len(err_str) < 120 else err_type}"
 
         now_str2 = datetime.now(IST).strftime("%I:%M %p")
         st.markdown(
