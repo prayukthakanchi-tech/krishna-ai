@@ -111,12 +111,15 @@ def get_groq_client():
 def get_validated_groq_models(client) -> list[str]:
     """
     Dynamically validate active models on Groq API.
-    Falls back to supported defaults if listing fails.
+    Returns currently supported production models, prioritizing active endpoints.
     """
     DEFAULT_MODELS = [
+        "openai/gpt-oss-120b",
+        "groq/compound",
+        "groq/compound-mini",
+        "qwen/qwen3.6-27b",
+        "openai/gpt-oss-20b",
         "llama-3.3-70b-versatile",
-        "llama-3.1-70b-versatile",
-        "llama3-70b-8192",
         "llama-3.1-8b-instant",
     ]
     if not client:
@@ -128,6 +131,7 @@ def get_validated_groq_models(client) -> list[str]:
             active_ids = [m.id for m in models_res.data if hasattr(m, "id")]
             valid_chain = [m for m in DEFAULT_MODELS if m in active_ids]
             if valid_chain:
+                logger.info(f"Validated active Groq models: {valid_chain}")
                 return valid_chain
     except Exception as e:
         logger.warning(f"Dynamic Groq model validation failed: {e}. Using default fallback list.")
@@ -1464,6 +1468,7 @@ if user_msg:
         last_model_err = None
         for m_name in GROQ_MODELS:
             try:
+                logger.info(f"Attempting Groq chat completion with model: {m_name}")
                 stream = client.chat.completions.create(
                     model=m_name,
                     messages=[{"role": "system", "content": build_prompt()}] + api_messages,
@@ -1472,13 +1477,17 @@ if user_msg:
                     top_p=0.9,
                     stream=True,
                 )
+                logger.info(f"Groq streaming session initialized successfully with model: {m_name}")
                 break
             except Exception as me:
                 last_model_err = me
-                logger.warning(f"Groq Model {m_name} failed: {me}")
+                err_type = type(me).__name__
+                err_str = str(me)
+                logger.warning(f"Groq model '{m_name}' failed ({err_type}): {err_str[:120]}")
                 continue
 
         if not stream:
+            logger.error(f"All Groq models in fallback chain failed. Last error: {last_model_err}")
             raise last_model_err or RuntimeError("No Groq models available.")
 
         typing_slot.empty()
