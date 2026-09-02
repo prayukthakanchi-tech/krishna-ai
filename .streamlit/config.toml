@@ -1,6 +1,10 @@
+[server]
+useStarlette = false
+
 [theme]
 primaryColor = "#a78bfa"
 backgroundColor = "#05080f"
 secondaryBackgroundColor = "#0d1424"
 textColor = "#e8eaf0"
 font = "sans serif"
+

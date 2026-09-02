@@ -938,8 +938,69 @@ def message_footer_html(ts: str, content: str, is_assistant: bool) -> str:
 
 
 # ─────────────────────────────────────────────
-# 🔐 STREAMLIT NATIVE OIDC AUTHENTICATION
+# 🔐 STREAMLIT NATIVE OIDC AUTHENTICATION & DIAGNOSTICS
 # ─────────────────────────────────────────────
+import sys
+try:
+    import authlib
+    _authlib_ver = getattr(authlib, "__version__", "unknown")
+except Exception as _e:
+    _authlib_ver = f"error: {_e}"
+
+_star_opt = st.config.get_option("server.useStarlette")
+print(
+    f"[KRISHNA_DEPLOYED_ENV] Python={sys.version.split()[0]} | "
+    f"Streamlit={st.__version__} | "
+    f"Authlib={_authlib_ver} | "
+    f"useStarlette={_star_opt}",
+    flush=True
+)
+
+# Intercept and log any low-level OAuth callback errors in Starlette/Tornado
+def _install_oauth_callback_diagnostics():
+    import traceback, urllib.parse
+
+    # 1. Starlette hook
+    try:
+        from streamlit.web.server.starlette import starlette_auth_routes as sar
+        if not getattr(sar, "_diagnostic_hook_installed", False):
+            _orig_sar_cb = sar._auth_callback
+            async def _logged_sar_cb(request, base_url):
+                try:
+                    return await _orig_sar_cb(request, base_url)
+                except Exception as exc:
+                    tb = traceback.format_exc()
+                    print(f"\n[CRITICAL_OAUTH_TRACEBACK_STARLETTE]\n{tb}\n", flush=True)
+                    logger.error(f"Starlette OAuth callback failed:\n{tb}")
+                    from starlette.responses import RedirectResponse
+                    err_msg = urllib.parse.quote(f"{type(exc).__name__}: {str(exc)[:200]}")
+                    return RedirectResponse(f"/?oauth_error={err_msg}", status_code=302)
+            sar._auth_callback = _logged_sar_cb
+            sar._diagnostic_hook_installed = True
+    except Exception:
+        pass
+
+    # 2. Tornado hook
+    try:
+        from streamlit.web.server import oauth_authlib_routes as oar
+        if not getattr(oar, "_diagnostic_hook_installed", False):
+            _orig_oar_get = oar.AuthCallbackHandler.get
+            async def _logged_oar_get(self):
+                try:
+                    return await _orig_oar_get(self)
+                except Exception as exc:
+                    tb = traceback.format_exc()
+                    print(f"\n[CRITICAL_OAUTH_TRACEBACK_TORNADO]\n{tb}\n", flush=True)
+                    logger.error(f"Tornado OAuth callback failed:\n{tb}")
+                    err_msg = urllib.parse.quote(f"{type(exc).__name__}: {str(exc)[:200]}")
+                    self.redirect(f"/?oauth_error={err_msg}")
+            oar.AuthCallbackHandler.get = _logged_oar_get
+            oar._diagnostic_hook_installed = True
+    except Exception:
+        pass
+
+_install_oauth_callback_diagnostics()
+
 def _extract_authenticated_email() -> str | None:
     """
     Extract authenticated email from Streamlit native OIDC (st.user)
@@ -1287,6 +1348,10 @@ if "user" not in st.session_state:
             <p style='color:rgba(255,255,255,0.6);margin:0;font-size:12px;'>Login to continue to Krishna AI</p>
         </div>
         """, unsafe_allow_html=True)
+
+        oauth_err = st.query_params.get("oauth_error")
+        if oauth_err:
+            st.error(f"❌ Google OAuth Error: {oauth_err}")
 
         # ── Primary: Continue with Google ──
         if st.button("🌐  Continue with Google", key="btn_google_login", use_container_width=True):
