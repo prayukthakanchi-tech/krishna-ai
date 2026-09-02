@@ -492,26 +492,43 @@ This is an automated message. Please do not reply.
             except Exception as parse_err:
                 logger.error(f"Resend response body is non-JSON ({type(parse_err).__name__})")
 
-            # 401/403 = API key or sender/domain configuration error.
-            # These are permanent errors — SMTP fallback is not appropriate.
-            if err_code in (401, 403):
-                logger.error(f"Resend configuration error (HTTP {err_code}). SMTP fallback suppressed.")
-                return False, "Email service configuration error. Please try again later or contact support."
-            # 422 = recipient/payload rejected — report specifically, do not fall back.
-            elif err_code == 422:
-                return False, f"Email address '{cleaned_email}' was rejected by the mail service."
-            # 4xx other than above = client error, do not fall back to SMTP.
+            resend_reason = ""
+            # Check if this is Resend's sandbox limitation (can only send to own account email)
+            is_sandbox_restriction = (
+                err_code in (403, 422) and (
+                    "own email address" in err_message.lower() or
+                    "testing email address" in err_message.lower() or
+                    err_name == "validation_error"
+                )
+            )
+
+            if is_sandbox_restriction:
+                logger.warning(
+                    f"Resend sandbox restricted delivery to '{cleaned_email}'. Falling back to SMTP."
+                )
+                resend_reason = "sandbox_restricted"
+            elif err_code == 401:
+                logger.error("Resend API key missing or invalid (HTTP 401). Falling back to SMTP.")
+                resend_reason = "auth_failed"
             elif 400 <= err_code < 500:
-                logger.error(f"Resend client error HTTP {err_code}. SMTP fallback suppressed.")
-                return False, "Email service configuration error. Please try again later or contact support."
-            # 5xx = Resend server-side issue — fall back to SMTP.
+                logger.error(f"Resend client error HTTP {err_code} ({err_name}). Falling back to SMTP.")
+                resend_reason = "client_error"
             else:
                 logger.warning(f"Resend server error HTTP {err_code}. Falling back to SMTP.")
+                resend_reason = "server_error"
         except Exception as e:
             logger.warning(f"Resend HTTP API delivery failed ({type(e).__name__}). Falling back to SMTP.")
+            resend_reason = "connection_error"
 
     # ── Tier 2: Dual-Port Dual-Mode SMTP (Port 465 SSL, fallback to Port 587 STARTTLS) ──
     if not sender_email or not sender_password:
+        if resend_key:
+            if resend_reason == "sandbox_restricted":
+                logger.error("Recipient rejected by Resend sandbox and SMTP credentials are not configured.")
+                return False, "Free email sandbox only permits delivery to the registered account owner. To send to other addresses, SMTP credentials must be configured."
+            else:
+                logger.error(f"Resend failed ({resend_reason}) and SMTP credentials are not configured.")
+                return False, "Email service configuration error. Please check the email service settings."
         logger.error("No valid email credentials configured in Secrets.")
         return False, "Email credentials not configured."
 
@@ -533,7 +550,7 @@ This is an automated message. Please do not reply.
             return True, ""
     except smtplib.SMTPAuthenticationError:
         logger.error("SMTP Auth Failure (Code 535): Invalid username or password.")
-        return False, "Gmail auth failed. Check your App Password."
+        return False, "Gmail SMTP auth failed (Code 535). Please update your Google App Password."
     except smtplib.SMTPRecipientsRefused:
         logger.error(f"SMTP Recipient Refused for: {cleaned_email}")
         return False, f"Email address '{cleaned_email}' was rejected."
@@ -551,7 +568,7 @@ This is an automated message. Please do not reply.
                 return True, ""
         except smtplib.SMTPAuthenticationError:
             logger.error("SMTP Auth Failure (Code 535): Invalid username or password.")
-            return False, "Gmail auth failed. Check your App Password."
+            return False, "Gmail SMTP auth failed (Code 535). Please update your Google App Password."
         except smtplib.SMTPRecipientsRefused:
             logger.error(f"SMTP Recipient Refused for: {cleaned_email}")
             return False, f"Email address '{cleaned_email}' was rejected."

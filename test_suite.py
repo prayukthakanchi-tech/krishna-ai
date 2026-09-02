@@ -246,8 +246,8 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
                     ok, err = send_otp_email("user@example.com", "123456")
                     self.assertTrue(ok)
                     self.assertEqual(err, "")
-    def test_resend_403_domain_restriction_no_smtp_fallback(self):
-        """HTTP 403 (domain/sender restriction) must return config error, NOT Gmail error, and NOT create OTP state."""
+    def test_resend_403_domain_restriction_behavior(self):
+        """HTTP 403 sandbox restriction must fall back to SMTP if configured, or return sandbox notice if not."""
         import urllib.error
         from unittest.mock import patch, MagicMock
         from app import send_otp_email, _load_otp_state
@@ -260,17 +260,23 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
         http_403.read = lambda: err_response
 
         email = "other_user@gmail.com"
+
+        # Case A: SMTP not configured -> returns clear sandbox message
         with patch("app.get_secret", side_effect=lambda k: "re_mock_key" if k == "RESEND_API_KEY" else None):
             with patch("urllib.request.urlopen", side_effect=http_403):
                 ok, err = send_otp_email(email, "777777")
                 self.assertFalse(ok)
-                # Must be a safe generic message, NOT mentioning Gmail or App Password
-                self.assertNotIn("Gmail", err)
-                self.assertNotIn("App Password", err)
-                self.assertIn("configuration error", err)
-                # OTP state must NOT be created
-                state = _load_otp_state()
-                self.assertNotIn(email, state)
+                self.assertIn("sandbox only permits delivery", err)
+
+        # Case B: SMTP IS configured -> transparently falls back to SMTP and succeeds
+        mock_smtp = MagicMock()
+        mock_smtp.__enter__.return_value = mock_smtp
+        with patch("app.get_secret", side_effect=lambda k: "re_mock_key" if k == "RESEND_API_KEY" else ("sender@gmail.com" if k == "EMAIL" else ("pass" if k == "PASSWORD" else None))):
+            with patch("urllib.request.urlopen", side_effect=http_403):
+                with patch("smtplib.SMTP_SSL", return_value=mock_smtp):
+                    ok, err = send_otp_email(email, "777777")
+                    self.assertTrue(ok)
+                    self.assertEqual(err, "")
 
     def test_resend_401_auth_failure_no_smtp_fallback(self):
         """HTTP 401 (invalid API key) must return config error, NOT fall back to SMTP."""
@@ -594,6 +600,123 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
         # Correct OTP
         good_ok, _ = otp_verify(test_email, otp)
         self.assertTrue(good_ok)
+
+
+    def test_otp_new_code_invalidates_previous_code(self):
+        """Requesting a new OTP must invalidate the previous OTP code immediately."""
+        test_email = "invalidation_test@example.com"
+        otp1 = generate_otp(6)
+        otp2 = generate_otp(6)
+        while otp2 == otp1:
+            otp2 = generate_otp(6)
+
+        # Issue first OTP
+        otp_create(test_email, otp1)
+
+        # Issue second OTP (e.g. user clicked Resend)
+        otp_create(test_email, otp2)
+
+        # First OTP must now fail
+        ok1, err1 = otp_verify(test_email, otp1)
+        self.assertFalse(ok1)
+        self.assertIn("Wrong OTP", err1)
+
+        # Second OTP must succeed
+        ok2, err2 = otp_verify(test_email, otp2)
+        self.assertTrue(ok2)
+        self.assertEqual(err2, "")
+
+    def test_otp_expired_code_fails(self):
+        """OTP older than 300 seconds must fail with an expired message."""
+        import time
+        from app import _load_otp_state, _save_otp_state, hash_otp
+        test_email = "expired_test@example.com"
+        otp = generate_otp(6)
+
+        # Save an expired state (expired 5 seconds ago)
+        state = _load_otp_state()
+        state[test_email] = {
+            "otp_hash": hash_otp(otp),
+            "expires_at": time.time() - 5,
+            "attempts": 0,
+            "last_send": time.time() - 305
+        }
+        _save_otp_state(state)
+
+        ok, err = otp_verify(test_email, otp)
+        self.assertFalse(ok)
+        self.assertIn("expired", err.lower())
+
+    def test_otp_brute_force_lockout(self):
+        """More than 5 wrong attempts must lock out the OTP."""
+        test_email = "brute_force_test@example.com"
+        otp = generate_otp(6)
+        otp_create(test_email, otp)
+
+        for _ in range(5):
+            ok, err = otp_verify(test_email, "999999")
+            self.assertFalse(ok)
+
+        # 6th attempt should be locked out
+        ok, err = otp_verify(test_email, otp)  # Even with correct OTP
+        self.assertFalse(ok)
+        self.assertIn("Too many failed attempts", err)
+
+    def test_explicit_multi_user_data_preservation_and_isolation(self):
+        """
+        Explicit test verifying:
+        1. Multiple users with rich conversation history and memories can coexist.
+        2. Authentication via OAuth or OTP never overwrites, mutates, or bleeds data.
+        3. No cross-user access is possible.
+        """
+        user_alpha = "alpha_seeker@test.org"
+        user_beta = "beta_seeker@test.org"
+
+        # Seed User Alpha data
+        alpha_chats = {
+            "Karma Yoga Inquiry": [
+                {"role": "user", "content": "How do I perform duty without attachment?", "timestamp": "09:00 AM"},
+                {"role": "assistant", "content": "Focus on the action, never on the fruit.", "timestamp": "09:01 AM"}
+            ]
+        }
+        database.save_user_chats(user_alpha, alpha_chats)
+        database.save_user_memory(user_alpha, "Practices daily meditation for focus.", category="preference", importance=9)
+
+        # Seed User Beta data
+        beta_chats = {
+            "Grief Counseling": [
+                {"role": "user", "content": "How to overcome the sorrow of loss?", "timestamp": "11:00 AM"},
+                {"role": "assistant", "content": "The soul neither is born nor dies.", "timestamp": "11:02 AM"}
+            ]
+        }
+        database.save_user_chats(user_beta, beta_chats)
+        database.save_user_memory(user_beta, "Lost a close mentor recently.", category="relationship", importance=10)
+
+        # Verify Alpha cannot see Beta's data
+        alpha_loaded_chats = database.load_user_chats(user_alpha)
+        alpha_loaded_mems = database.load_user_memories(user_alpha)
+        self.assertIn("Karma Yoga Inquiry", alpha_loaded_chats)
+        self.assertNotIn("Grief Counseling", alpha_loaded_chats)
+        self.assertEqual(len(alpha_loaded_mems), 1)
+        self.assertEqual(alpha_loaded_mems[0]["category"], "preference")
+        self.assertNotIn("mentor", alpha_loaded_mems[0]["memory_text"])
+
+        # Verify Beta cannot see Alpha's data
+        beta_loaded_chats = database.load_user_chats(user_beta)
+        beta_loaded_mems = database.load_user_memories(user_beta)
+        self.assertIn("Grief Counseling", beta_loaded_chats)
+        self.assertNotIn("Karma Yoga Inquiry", beta_loaded_chats)
+        self.assertEqual(len(beta_loaded_mems), 1)
+        self.assertEqual(beta_loaded_mems[0]["category"], "relationship")
+        self.assertNotIn("meditation", beta_loaded_mems[0]["memory_text"])
+
+        # Add new chat to Alpha and ensure Beta is still completely unaffected
+        alpha_chats["Bhakti Yoga"] = [{"role": "user", "content": "What is devotion?", "timestamp": "09:15 AM"}]
+        database.save_user_chats(user_alpha, alpha_chats)
+
+        beta_reloaded_chats = database.load_user_chats(user_beta)
+        self.assertNotIn("Bhakti Yoga", beta_reloaded_chats)
+        self.assertEqual(len(beta_reloaded_chats), 1)
 
 
 if __name__ == "__main__":
