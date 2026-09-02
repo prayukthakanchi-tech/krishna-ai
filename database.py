@@ -183,13 +183,9 @@ def get_supabase_google_oauth_url(redirect_uri: Optional[str] = None) -> Tuple[b
     verifier, challenge = create_oauth_pkce_challenge()
     save_pending_pkce_verifier(state_token, verifier)
 
-    # Embed state in redirect_to AND pass state parameter for maximum compatibility
-    delimiter = "&" if "?" in target_redirect else "?"
-    redirect_with_state = f"{target_redirect}{delimiter}state={state_token}"
-
     params = {
         "provider": "google",
-        "redirect_to": redirect_with_state,
+        "redirect_to": target_redirect,
         "code_challenge": challenge,
         "code_challenge_method": "s256",
         "state": state_token

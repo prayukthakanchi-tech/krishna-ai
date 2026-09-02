@@ -494,6 +494,10 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
             self.assertIn("provider=google", oauth_url)
             self.assertIn("code_challenge=", oauth_url)
             self.assertIn("code_challenge_method=s256", oauth_url)
+            self.assertIn("state=", oauth_url)
+            self.assertIn("redirect_to=https%3A%2F%2Fmock.app", oauth_url)
+            self.assertNotIn("mock.app%3Fstate", oauth_url)
+            self.assertNotIn("mock.app&state", oauth_url)
 
     def test_oauth_code_exchange_success_mock(self):
         from unittest.mock import patch, MagicMock
