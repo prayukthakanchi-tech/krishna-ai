@@ -940,14 +940,54 @@ def message_footer_html(ts: str, content: str, is_assistant: bool) -> str:
 # ─────────────────────────────────────────────
 # 🔐 STREAMLIT NATIVE OIDC AUTHENTICATION
 # ─────────────────────────────────────────────
-oidc_email = None
-try:
-    if hasattr(st, "user") and getattr(st.user, "is_logged_in", False):
-        raw_email = st.user.get("email") or getattr(st.user, "email", None)
-        if raw_email:
-            oidc_email = raw_email.strip().lower()
-except Exception as e:
-    logger.warning(f"Error inspecting st.user: {e}")
+def _extract_authenticated_email() -> str | None:
+    """
+    Extract authenticated email from Streamlit native OIDC (st.user)
+    or Streamlit Cloud identity headers (st.experimental_user).
+    """
+    # 1. Native OIDC st.user
+    if hasattr(st, "user"):
+        u = st.user
+        is_logged_in = False
+        try:
+            is_logged_in = bool(getattr(u, "is_logged_in", False))
+        except Exception:
+            pass
+
+        if is_logged_in:
+            for field in ("email", "preferred_username", "upn", "name"):
+                val = None
+                try:
+                    if hasattr(u, "get"):
+                        val = u.get(field)
+                    if not val and hasattr(u, field):
+                        val = getattr(u, field, None)
+                except Exception:
+                    pass
+                if val and isinstance(val, str) and "@" in val:
+                    return val.strip().lower()
+
+    # 2. Streamlit Cloud identity fallback
+    if hasattr(st, "experimental_user"):
+        try:
+            exp_email = getattr(st.experimental_user, "email", None)
+            if exp_email and isinstance(exp_email, str) and "@" in exp_email:
+                return exp_email.strip().lower()
+        except Exception:
+            pass
+
+    return None
+
+oidc_email = _extract_authenticated_email()
+
+# Safe diagnostic logging (no secrets, tokens, or credentials)
+logger.info(
+    "Auth state check: has_st_user=%s, is_logged_in=%s, email_detected=%s, session_user=%s",
+    hasattr(st, "user"),
+    getattr(st.user, "is_logged_in", False) if hasattr(st, "user") else False,
+    bool(oidc_email),
+    bool(st.session_state.get("user"))
+)
 
 if oidc_email and st.session_state.get("user") != oidc_email:
     database.provision_user_if_new(oidc_email)
@@ -963,6 +1003,7 @@ if oidc_email and st.session_state.get("user") != oidc_email:
     st.session_state.chats      = None
     st.session_state.memory     = None
     st.query_params.clear()
+    st.rerun()
 
 if "user" not in st.session_state:
 
