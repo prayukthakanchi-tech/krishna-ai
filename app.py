@@ -449,7 +449,8 @@ This is an automated message. Please do not reply.
             url = "https://api.resend.com/emails"
             headers = {
                 "Authorization": f"Bearer {resend_key}",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
             }
             resend_from = get_secret("RESEND_FROM_EMAIL") or "onboarding@resend.dev"
             payload = {
