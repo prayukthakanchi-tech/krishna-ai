@@ -339,21 +339,27 @@ def generate_otp(length: int = 6) -> str:
 
 
 def send_otp_email(to_email: str, otp: str) -> tuple[bool, str]:
-    if not EMAIL or not PASSWORD:
-        return False, "Email credentials not configured."
-    if not is_valid_email(to_email):
+    """
+    Production-grade OTP delivery with multi-tier resilience:
+    Tier 1: Transactional HTTP API (Resend) if RESEND_API_KEY is configured.
+    Tier 2: Dual-Port Dual-Mode SMTP (Port 465 SSL, fallback to Port 587 STARTTLS).
+    Handles authentication, connection, timeout, and recipient failures separately.
+    Logs diagnostic errors server-side without leaking secrets/passwords/OTPs.
+    """
+    cleaned_email = to_email.strip().lower()
+    if not is_valid_email(cleaned_email):
+        logger.warning("OTP delivery attempted for invalid email format.")
         return False, "Invalid email address."
+
+    # Dynamic credential retrieval from Secrets / Env
+    resend_key = get_secret("RESEND_API_KEY")
+    sender_email = get_secret("EMAIL")
+    sender_password = get_secret("PASSWORD")
+    smtp_host = get_secret("SMTP_HOST") or "smtp.gmail.com"
 
     expiry_mins = OTP_EXPIRY_SECONDS // 60
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"{otp} is your Krishna AI verification code"
-    msg["From"]    = f"Krishna AI <{EMAIL}>"
-    msg["To"]      = to_email
-    msg["X-Entity-Ref-ID"] = generate_otp(10)
-
-    # ── Plain Text Fallback ──
-    plain = f"""Hello,
+    plain_body = f"""Hello,
 
 Your Krishna AI verification code is: {otp}
 
@@ -367,7 +373,6 @@ Krishna AI · Created by Prayuktha Kanchi
 This is an automated message. Please do not reply.
 """
 
-    # ── Production-Grade HTML Template (Gmail / Outlook Compatible Inline CSS) ──
     html_body = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -380,8 +385,6 @@ This is an automated message. Please do not reply.
     <tr>
       <td align="center">
         <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width:520px;background-color:#0e0a1a;border:1px solid #2a1f4d;border-radius:20px;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,0.6);">
-          
-          <!-- Header -->
           <tr>
             <td style="background:linear-gradient(135deg,#181133 0%,#0e0a1a 100%);padding:36px 32px 28px;text-align:center;border-bottom:1px solid #231842;">
               <div style="display:inline-block;width:56px;height:56px;line-height:56px;border-radius:50%;background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.3);font-size:28px;margin-bottom:12px;">🦚</div>
@@ -389,16 +392,12 @@ This is an automated message. Please do not reply.
               <p style="margin:4px 0 0;color:#a78bfa;font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;">Authentication Security</p>
             </td>
           </tr>
-
-          <!-- Body -->
           <tr>
             <td style="padding:32px;color:#e4e4e7;font-size:15px;line-height:1.6;">
               <p style="margin:0 0 16px;color:#ffffff;font-size:16px;font-weight:600;">Hello,</p>
               <p style="margin:0 0 24px;color:#a1a1aa;font-size:14px;line-height:1.6;">
                 You requested a verification code to sign in to your <strong>Krishna AI</strong> account. Enter the single-use code below to complete authentication:
               </p>
-
-              <!-- OTP Display Box -->
               <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin:24px 0;">
                 <tr>
                   <td align="center" style="background-color:#160f2e;border:1px solid #3d2b75;border-radius:16px;padding:28px 20px;text-align:center;">
@@ -408,8 +407,6 @@ This is an automated message. Please do not reply.
                   </td>
                 </tr>
               </table>
-
-              <!-- Security Warning Box -->
               <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-top:24px;">
                 <tr>
                   <td style="background-color:rgba(245,158,11,0.08);border-left:3px solid #f59e0b;border-radius:6px;padding:14px 16px;">
@@ -419,14 +416,11 @@ This is an automated message. Please do not reply.
                   </td>
                 </tr>
               </table>
-
               <p style="margin:24px 0 0;font-size:13px;color:#71717a;line-height:1.5;">
                 If you did not request this verification code, no action is needed. Your account remains secure.
               </p>
             </td>
           </tr>
-
-          <!-- Footer -->
           <tr>
             <td style="background-color:#080512;padding:24px 32px;border-top:1px solid #1c1436;text-align:center;font-size:12px;color:#71717a;line-height:1.6;">
               <p style="margin:0 0 6px;color:#a1a1aa;font-weight:500;">Krishna AI &bull; Created by Prayuktha Kanchi</p>
@@ -434,7 +428,6 @@ This is an automated message. Please do not reply.
               <p style="margin:0;font-size:11px;color:#3f3f46;">&copy; 2026 Krishna AI. All rights reserved.</p>
             </td>
           </tr>
-
         </table>
       </td>
     </tr>
@@ -443,25 +436,92 @@ This is an automated message. Please do not reply.
 </html>
 """
 
-    msg.attach(MIMEText(plain, "plain"))
+    # ── Tier 1: Transactional HTTP API (Resend) ──
+    if resend_key:
+        try:
+            import urllib.request
+            import urllib.error
+
+            url = "https://api.resend.com/emails"
+            headers = {
+                "Authorization": f"Bearer {resend_key}",
+                "Content-Type": "application/json"
+            }
+            from_email = sender_email if (sender_email and "resend.dev" not in sender_email) else "onboarding@resend.dev"
+            payload = {
+                "from": f"Krishna AI <{from_email}>",
+                "to": [cleaned_email],
+                "subject": f"{otp} is your Krishna AI verification code",
+                "html": html_body,
+                "text": plain_body
+            }
+            req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                if 200 <= resp.status < 300:
+                    logger.info("OTP email sent successfully via Resend HTTP API.")
+                    return True, ""
+        except urllib.error.HTTPError as he:
+            err_code = he.code
+            err_body = he.read().decode("utf-8", errors="ignore")
+            logger.error(f"Resend HTTP API Error {err_code}: {err_body[:120]}")
+            if err_code in (401, 403):
+                pass
+            elif err_code == 422:
+                return False, f"Email address '{cleaned_email}' was rejected."
+        except Exception as e:
+            logger.warning(f"Resend HTTP API delivery failed ({type(e).__name__}). Falling back to SMTP.")
+
+    # ── Tier 2: Dual-Port Dual-Mode SMTP (Port 465 SSL, fallback to Port 587 STARTTLS) ──
+    if not sender_email or not sender_password:
+        logger.error("No valid email credentials configured in Secrets.")
+        return False, "Email credentials not configured."
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"{otp} is your Krishna AI verification code"
+    msg["From"]    = f"Krishna AI <{sender_email}>"
+    msg["To"]      = cleaned_email
+    msg["X-Entity-Ref-ID"] = generate_otp(10)
+    msg.attach(MIMEText(plain_body, "plain"))
     msg.attach(MIMEText(html_body, "html"))
 
+    # Attempt 1: Port 465 SSL
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as server:
+        with smtplib.SMTP_SSL(smtp_host, 465, timeout=10) as server:
             server.ehlo()
-            server.login(EMAIL, PASSWORD)
+            server.login(sender_email, sender_password)
             server.send_message(msg)
+            logger.info("OTP email sent successfully via SMTP_SSL (Port 465).")
             return True, ""
     except smtplib.SMTPAuthenticationError:
+        logger.error("SMTP Auth Failure (Code 535): Invalid username or password.")
         return False, "Gmail auth failed. Check your App Password."
-    except smtplib.SMTPConnectError:
-        return False, "Cannot connect to Gmail."
     except smtplib.SMTPRecipientsRefused:
-        return False, f"Email '{to_email}' was rejected."
+        logger.error(f"SMTP Recipient Refused for: {cleaned_email}")
+        return False, f"Email address '{cleaned_email}' was rejected."
+    except (smtplib.SMTPConnectError, TimeoutError, OSError) as e:
+        logger.warning(f"SMTP_SSL (Port 465) connection failed ({type(e).__name__}). Attempting STARTTLS on Port 587.")
+        # Attempt 2: Fallback to Port 587 STARTTLS
+        try:
+            with smtplib.SMTP(smtp_host, 587, timeout=10) as server:
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+                server.login(sender_email, sender_password)
+                server.send_message(msg)
+                logger.info("OTP email sent successfully via SMTP STARTTLS (Port 587).")
+                return True, ""
+        except smtplib.SMTPAuthenticationError:
+            logger.error("SMTP Auth Failure (Code 535): Invalid username or password.")
+            return False, "Gmail auth failed. Check your App Password."
+        except smtplib.SMTPRecipientsRefused:
+            logger.error(f"SMTP Recipient Refused for: {cleaned_email}")
+            return False, f"Email address '{cleaned_email}' was rejected."
+        except Exception as err2:
+            logger.error(f"SMTP STARTTLS (Port 587) failed ({type(err2).__name__}): {err2}")
+            return False, "Network error connecting to mail server. Please try again."
     except smtplib.SMTPException as e:
-        return False, f"Email error: {e}"
-    except (TimeoutError, OSError):
-        return False, "Network error. Please try again."
+        logger.error(f"SMTP Exception ({type(e).__name__}): {e}")
+        return False, f"Email server error: {type(e).__name__}"
 
 
 # ─────────────────────────────────────────────
