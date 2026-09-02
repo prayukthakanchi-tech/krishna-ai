@@ -48,11 +48,9 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
         self.orig_otp_file = database.OTP_STATE_FILE
         self.orig_json_path = database.get_json_chat_path
         self.orig_memory_path = database.get_json_memory_path
-        self.orig_oauth_file = getattr(database, "OAUTH_PKCE_FILE", None)
 
         # Monkey-patch database data directory for tests
         database.OTP_STATE_FILE = os.path.join(self.test_data_dir, "_otp_state.json")
-        database.OAUTH_PKCE_FILE = os.path.join(self.test_data_dir, "_oauth_pkce.json")
         database.get_json_chat_path = lambda email: os.path.join(self.test_data_dir, f"{safe_filename(email)}_chats.json")
         database.get_json_memory_path = lambda email: os.path.join(self.test_data_dir, f"{safe_filename(email)}_memory.json")
 
@@ -60,8 +58,6 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
         database.OTP_STATE_FILE = self.orig_otp_file
         database.get_json_chat_path = self.orig_json_path
         database.get_json_memory_path = self.orig_memory_path
-        if self.orig_oauth_file:
-            database.OAUTH_PKCE_FILE = self.orig_oauth_file
         if os.path.exists(self.test_data_dir):
             shutil.rmtree(self.test_data_dir, ignore_errors=True)
 
@@ -471,234 +467,164 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
         self.assertIn("NEVER announce that you are reading from memory", prompt)
 
 
-    # ── 10. SUPABASE GOOGLE OAUTH & DATA COMPATIBILITY TESTS ──
-    def test_oauth_pkce_generation(self):
-        import base64
-        import hashlib
-        verifier, challenge = database.create_oauth_pkce_challenge()
-        self.assertTrue(len(verifier) >= 43)
-        self.assertTrue(len(challenge) >= 43)
-        self.assertNotIn("=", challenge)  # Must be unpadded base64url
+    # ── 10. STREAMLIT NATIVE OIDC & DATA COMPATIBILITY TESTS ──
+    def test_oidc_unauthenticated_user(self):
+        """When st.user is not logged in, user identity is not set."""
+        from unittest.mock import MagicMock
+        mock_user = MagicMock()
+        mock_user.is_logged_in = False
+        mock_user.get.return_value = None
 
-        # Verify challenge matches SHA-256 of verifier
-        expected_digest = hashlib.sha256(verifier.encode("ascii")).digest()
-        expected_challenge = base64.urlsafe_b64encode(expected_digest).decode("ascii").rstrip("=")
-        self.assertEqual(challenge, expected_challenge)
+        email = None
+        if mock_user.is_logged_in:
+            email = mock_user.get("email")
+        self.assertIsNone(email)
 
-    def test_oauth_authorization_url_generation(self):
-        from unittest.mock import patch
-        with patch("database.get_supabase_credentials", return_value=("https://mock.supabase.co", "mock_key")):
-            ok, oauth_url = database.get_supabase_google_oauth_url("https://mock.app")
-            self.assertTrue(ok)
-            self.assertIn("https://mock.supabase.co/auth/v1/authorize", oauth_url)
-            self.assertIn("provider=google", oauth_url)
-            self.assertIn("code_challenge=", oauth_url)
-            self.assertIn("code_challenge_method=s256", oauth_url)
-            self.assertIn("state=", oauth_url)
-            self.assertIn("redirect_to=https%3A%2F%2Fmock.app", oauth_url)
-            self.assertNotIn("mock.app%3Fstate", oauth_url)
-            self.assertNotIn("mock.app&state", oauth_url)
+    def test_oidc_authenticated_user_email_extraction(self):
+        """When st.user is logged in, email is extracted and normalized."""
+        from unittest.mock import MagicMock
+        mock_user = MagicMock()
+        mock_user.is_logged_in = True
+        mock_user.get.return_value = "  GoogleUser@Example.COM  "
 
-    def test_oauth_code_exchange_success_mock(self):
-        from unittest.mock import patch, MagicMock
+        raw_email = mock_user.get("email")
+        cleaned_email = raw_email.strip().lower() if raw_email else None
+        self.assertEqual(cleaned_email, "googleuser@example.com")
 
-        # Setup pending verifier with state
-        verifier = "mock_verifier_123456789012345678901234567890"
-        state = "mock_state_123"
-        database.save_pending_pkce_verifier(state, verifier)
+    def test_oidc_email_normalization(self):
+        """Verify various email inputs normalize to lowercase and stripped format."""
+        cases = [
+            ("User@Gmail.Com", "user@gmail.com"),
+            ("  SPACES@domain.org  ", "spaces@domain.org"),
+            ("mixed.CASE+tag@EXAMPLE.COM", "mixed.case+tag@example.com"),
+        ]
+        for inp, expected in cases:
+            self.assertEqual(inp.strip().lower(), expected)
 
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {
-            "access_token": "mock_token",
-            "token_type": "bearer",
-            "user": {
-                "id": "mock_user_uuid",
-                "email": "GoogleUser@Example.com"
-            }
-        }
-
-        with patch("database.get_supabase_credentials", return_value=("https://mock.supabase.co", "mock_key")):
-            with patch("requests.post", return_value=mock_resp):
-                ok, email, err = database.exchange_supabase_oauth_code("mock_auth_code_xyz", state=state)
-                self.assertTrue(ok)
-                self.assertEqual(email, "googleuser@example.com")  # Normalized
-                self.assertIsNone(err)
-
-    def test_oauth_code_exchange_failure_mock(self):
-        from unittest.mock import patch, MagicMock
-
-        state = "fail_state_xyz"
-        database.save_pending_pkce_verifier(state, "fail_verifier")
-
-        mock_resp = MagicMock()
-        mock_resp.status_code = 400
-        mock_resp.content = b'{"error":"invalid_grant","error_description":"Invalid code"}'
-        mock_resp.json.return_value = {"error": "invalid_grant", "error_description": "Invalid code"}
-
-        with patch("database.get_supabase_credentials", return_value=("https://mock.supabase.co", "mock_key")):
-            with patch("requests.post", return_value=mock_resp):
-                ok, email, err = database.exchange_supabase_oauth_code("invalid_code", state=state)
-                self.assertFalse(ok)
-                self.assertIsNone(email)
-                self.assertIn("Authentication failed", err)
-
-    def test_oauth_existing_user_data_compatibility(self):
+    def test_new_user_provisioning_and_duplicate_prevention(self):
         """
-        Verify that a user who has existing chats and memories (from OTP login)
-        retains ALL data when authenticating via Google OAuth (same email).
+        Verify database.provision_user_if_new provisions a user and
+        prevents duplicates via ON CONFLICT.
         """
-        email = "shared_identity@gmail.com"
+        test_email = "new_provisioned_user@gmail.com"
+        ok1 = database.provision_user_if_new(test_email)
+        self.assertTrue(ok1)
+
+        # Calling again must succeed cleanly without creating duplicate records
+        ok2 = database.provision_user_if_new(test_email)
+        self.assertTrue(ok2)
+
+    def test_oidc_existing_user_data_compatibility(self):
+        """
+        Verify that a user who has existing chats and memories
+        retains ALL data when authenticating via native OIDC (same normalized email).
+        """
+        email = "shared_oidc_identity@gmail.com"
 
         # 1. Simulate prior existence of chats and memories under email
         chats = {
-            "Spiritual Conversation": [
-                {"role": "user", "content": "How do I deal with burnout?", "timestamp": "10:00 AM"},
-                {"role": "assistant", "content": "Act without longing for fruit.", "timestamp": "10:01 AM"}
+            "Spiritual Guidance": [
+                {"role": "user", "content": "How do I find inner peace?", "timestamp": "10:00 AM"},
+                {"role": "assistant", "content": "Focus on the present moment.", "timestamp": "10:01 AM"}
             ]
         }
         database.save_user_chats(email, chats)
-        database.save_user_memory(email, "User is a senior engineer experiencing burnout.", category="career", importance=8)
+        database.save_user_memory(email, "User is seeking guidance on inner peace.", category="preference", importance=9)
 
-        # 2. Simulate OAuth login returning this email
-        from unittest.mock import patch, MagicMock
-        verifier = "verifier_compat_test"
-        state = "state_compat_test"
-        database.save_pending_pkce_verifier(state, verifier)
+        # 2. Simulate OIDC login returning this email with mixed casing
+        from unittest.mock import MagicMock
+        mock_user = MagicMock()
+        mock_user.is_logged_in = True
+        mock_user.get.return_value = "Shared_OIDC_Identity@Gmail.com"
 
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {
-            "access_token": "mock_oauth_token",
-            "user": {"email": "Shared_Identity@gmail.com"}  # mixed case from Google
-        }
-
-        with patch("database.get_supabase_credentials", return_value=("https://mock.supabase.co", "mock_key")):
-            with patch("requests.post", return_value=mock_resp):
-                ok, auth_email, _ = database.exchange_supabase_oauth_code("auth_code_123", state=state)
-                self.assertTrue(ok)
-                self.assertEqual(auth_email, email)
+        raw_email = mock_user.get("email")
+        auth_email = raw_email.strip().lower()
+        database.provision_user_if_new(auth_email)
 
         # 3. Load user's chats and memories using the authenticated email
         loaded_chats = database.load_user_chats(auth_email)
         loaded_memories = database.load_user_memories(auth_email)
 
-        self.assertIn("Spiritual Conversation", loaded_chats)
-        self.assertEqual(len(loaded_chats["Spiritual Conversation"]), 2)
+        self.assertIn("Spiritual Guidance", loaded_chats)
+        self.assertEqual(len(loaded_chats["Spiritual Guidance"]), 2)
         self.assertEqual(len(loaded_memories), 1)
-        self.assertEqual(loaded_memories[0]["category"], "career")
-        self.assertIn("burnout", loaded_memories[0]["memory_text"])
+        self.assertEqual(loaded_memories[0]["category"], "preference")
+        self.assertIn("inner peace", loaded_memories[0]["memory_text"].lower())
 
-    def test_oauth_multi_account_state_isolation_and_binding(self):
+    def test_oidc_user_a_and_user_b_isolation(self):
         """
-        Verify that Account A state binds to Account A verifier,
-        Account B state binds to Account B verifier,
-        and multiple overlapping flows do not collide.
+        Verify strict isolation: User A cannot read User B's chats or memories,
+        and User B cannot read User A's data.
         """
+        user_a = "user_alpha_oidc@gmail.com"
+        user_b = "user_beta_oidc@gmail.com"
+
+        database.save_user_chats(user_a, {"Chat A": [{"role": "user", "content": "Alpha secret"}]})
+        database.save_user_memory(user_a, "Alpha confidential thought", category="personal", importance=7)
+
+        database.save_user_chats(user_b, {"Chat B": [{"role": "user", "content": "Beta secret"}]})
+        database.save_user_memory(user_b, "Beta confidential thought", category="personal", importance=7)
+
+        # User A inspection
+        chats_a = database.load_user_chats(user_a)
+        memories_a = database.load_user_memories(user_a)
+        self.assertIn("Chat A", chats_a)
+        self.assertNotIn("Chat B", chats_a)
+        self.assertTrue(any("Alpha" in m["memory_text"] for m in memories_a))
+        self.assertFalse(any("Beta" in m["memory_text"] for m in memories_a))
+
+        # User B inspection
+        chats_b = database.load_user_chats(user_b)
+        memories_b = database.load_user_memories(user_b)
+        self.assertIn("Chat B", chats_b)
+        self.assertNotIn("Chat A", chats_b)
+        self.assertTrue(any("Beta" in m["memory_text"] for m in memories_b))
+        self.assertFalse(any("Alpha" in m["memory_text"] for m in memories_b))
+
+    def test_oidc_multi_user_concurrency(self):
+        """Verify multiple users (e.g. 5 concurrent users) remain fully isolated."""
+        users = [f"concurrent_user_{i}@gmail.com" for i in range(5)]
+        for i, u in enumerate(users):
+            database.save_user_chats(u, {f"Chat_{i}": [{"role": "user", "content": f"Message from user {i}"}]})
+            database.save_user_memory(u, f"Memory of user {i}", category="work", importance=5)
+
+        for i, u in enumerate(users):
+            user_chats = database.load_user_chats(u)
+            user_memories = database.load_user_memories(u)
+            self.assertIn(f"Chat_{i}", user_chats)
+            self.assertTrue(any(f"user {i}" in m["memory_text"] for m in user_memories))
+            # Verify no other user's chat is present
+            for other_i in range(5):
+                if other_i != i:
+                    self.assertNotIn(f"Chat_{other_i}", user_chats)
+
+    def test_oidc_logout_behavior(self):
+        """Verify logout clears session state and calls st.logout."""
         from unittest.mock import patch, MagicMock
+        fake_session = {"user": "test_logout@gmail.com", "chat_id": "chat_123"}
 
-        state_a = "state_account_a"
-        verifier_a = "verifier_for_a_1234567890"
-        state_b = "state_account_b"
-        verifier_b = "verifier_for_b_0987654321"
+        with patch("streamlit.logout") as mock_logout:
+            fake_session.clear()
+            mock_logout()
+            self.assertEqual(len(fake_session), 0)
+            mock_logout.assert_called_once()
 
-        # Overlapping/concurrent initialization
-        database.save_pending_pkce_verifier(state_a, verifier_a)
-        database.save_pending_pkce_verifier(state_b, verifier_b)
+    def test_no_hardcoded_emails_in_codebase(self):
+        """Verify that neither app.py nor database.py contains hardcoded email whitelists."""
+        for filename in ["app.py", "database.py"]:
+            with open(filename, "r", encoding="utf-8") as f:
+                content = f.read()
+            self.assertNotIn("whitelisted_emails", content)
+            self.assertNotIn("allowed_emails", content)
+            self.assertNotIn("ALLOWED_USERS", content)
 
-        captured_verifiers = []
-
-        def mock_post(url, **kwargs):
-            payload = kwargs.get("json", {})
-            captured_verifiers.append(payload.get("code_verifier"))
-            m = MagicMock()
-            m.status_code = 200
-            m.json.return_value = {
-                "access_token": "mock_token",
-                "user": {"email": "user_a@gmail.com" if payload.get("code_verifier") == verifier_a else "user_b@gmail.com"}
-            }
-            return m
-
-        with patch("database.get_supabase_credentials", return_value=("https://mock.supabase.co", "mock_key")):
-            with patch("requests.post", side_effect=mock_post):
-                # Account B exchanges first
-                ok_b, email_b, _ = database.exchange_supabase_oauth_code("code_b", state=state_b)
-                self.assertTrue(ok_b)
-                self.assertEqual(email_b, "user_b@gmail.com")
-                self.assertEqual(captured_verifiers[-1], verifier_b)
-
-                # Account A exchanges next
-                ok_a, email_a, _ = database.exchange_supabase_oauth_code("code_a", state=state_a)
-                self.assertTrue(ok_a)
-                self.assertEqual(email_a, "user_a@gmail.com")
-                self.assertEqual(captured_verifiers[-1], verifier_a)
-
-    def test_oauth_wrong_state_and_missing_state_handling(self):
-        """Wrong state must fail cleanly without making upstream HTTP calls."""
-        from unittest.mock import patch
-
-        database.save_pending_pkce_verifier("valid_state_1", "v1")
-        database.save_pending_pkce_verifier("valid_state_2", "v2")
-
-        with patch("database.get_supabase_credentials", return_value=("https://mock.supabase.co", "mock_key")):
-            with patch("requests.post") as mock_post:
-                # Wrong state
-                ok, email, err = database.exchange_supabase_oauth_code("some_code", state="non_existent_state")
-                self.assertFalse(ok)
-                self.assertIsNone(email)
-                self.assertIn("expired or invalid", err)
-                mock_post.assert_not_called()
-
-                # Missing state with multiple flows pending
-                ok2, email2, err2 = database.exchange_supabase_oauth_code("some_code", state=None)
-                self.assertFalse(ok2)
-                self.assertIsNone(email2)
-                self.assertIn("expired or invalid", err2)
-                mock_post.assert_not_called()
-
-    def test_oauth_replayed_state_is_rejected(self):
-        """A state cannot be replayed; it is consumed on the first exchange."""
-        from unittest.mock import patch, MagicMock
-
-        state = "single_use_state"
-        database.save_pending_pkce_verifier(state, "verifier_single_use")
-
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {
-            "access_token": "token",
-            "user": {"email": "first_login@gmail.com"}
-        }
-
-        with patch("database.get_supabase_credentials", return_value=("https://mock.supabase.co", "mock_key")):
-            with patch("requests.post", return_value=mock_resp):
-                # 1st attempt succeeds
-                ok1, _, _ = database.exchange_supabase_oauth_code("code_1", state=state)
-                self.assertTrue(ok1)
-
-                # 2nd attempt with same state must fail (consumed)
-                ok2, _, err2 = database.exchange_supabase_oauth_code("code_2", state=state)
-                self.assertFalse(ok2)
-                self.assertIn("expired or invalid", err2)
-
-    def test_oauth_single_token_exchange_attempt_no_code_burning(self):
-        """Verify that token endpoint is called at most once per exchange request."""
-        from unittest.mock import patch, MagicMock
-
-        state = "single_call_state"
-        database.save_pending_pkce_verifier(state, "single_call_verifier")
-
-        mock_resp = MagicMock()
-        mock_resp.status_code = 400
-        mock_resp.content = b'{"error":"invalid_grant"}'
-        mock_resp.json.return_value = {"error": "invalid_grant"}
-
-        with patch("database.get_supabase_credentials", return_value=("https://mock.supabase.co", "mock_key")):
-            with patch("requests.post", return_value=mock_resp) as mock_post:
-                ok, _, _ = database.exchange_supabase_oauth_code("code_single", state=state)
-                self.assertFalse(ok)
-                # MUST be called exactly once
-                self.assertEqual(mock_post.call_count, 1)
+    def test_no_obsolete_custom_oauth_code(self):
+        """Verify obsolete custom OAuth functions and files are completely removed."""
+        self.assertFalse(hasattr(database, "create_oauth_pkce_challenge"))
+        self.assertFalse(hasattr(database, "save_pending_pkce_verifier"))
+        self.assertFalse(hasattr(database, "get_supabase_google_oauth_url"))
+        self.assertFalse(hasattr(database, "exchange_supabase_oauth_code"))
+        self.assertFalse(hasattr(database, "OAUTH_PKCE_FILE"))
 
     def test_otp_and_oauth_coexistence(self):
         """

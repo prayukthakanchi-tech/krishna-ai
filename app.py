@@ -52,9 +52,7 @@ from email.mime.multipart import MIMEMultipart
 from groq import Groq
 from dotenv import load_dotenv
 import base64
-import importlib
 import database
-importlib.reload(database)
 
 # ─────────────────────────────────────────────
 # CONFIG & SECRETS
@@ -940,40 +938,31 @@ def message_footer_html(ts: str, content: str, is_assistant: bool) -> str:
 
 
 # ─────────────────────────────────────────────
-# 🔐 LOGIN FLOW & OAUTH CALLBACK
+# 🔐 STREAMLIT NATIVE OIDC AUTHENTICATION
 # ─────────────────────────────────────────────
-# Handle Supabase Google OAuth Callback via URL Query Parameters (PKCE flow)
-auth_code = st.query_params.get("code")
-state_token = st.query_params.get("state")
-oauth_err = st.query_params.get("error") or st.query_params.get("error_description")
+oidc_email = None
+try:
+    if hasattr(st, "user") and getattr(st.user, "is_logged_in", False):
+        raw_email = st.user.get("email") or getattr(st.user, "email", None)
+        if raw_email:
+            oidc_email = raw_email.strip().lower()
+except Exception as e:
+    logger.warning(f"Error inspecting st.user: {e}")
 
-if oauth_err:
-    st.error(f"Google Sign-In was not completed: {oauth_err}")
+if oidc_email and st.session_state.get("user") != oidc_email:
+    database.provision_user_if_new(oidc_email)
+    c_path = get_path(oidc_email, "chats")
+    is_new_user = not os.path.exists(c_path)
+    st.session_state.welcome_msg = (
+        "🎉 Welcome to Krishna AI! Your account is ready."
+        if is_new_user else "Welcome back!"
+    )
+    st.session_state.user       = oidc_email
+    st.session_state.chat_id    = None
+    st.session_state.login_time = time.time()
+    st.session_state.chats      = None
+    st.session_state.memory     = None
     st.query_params.clear()
-elif auth_code and "user" not in st.session_state:
-    if hasattr(database, "exchange_supabase_oauth_code"):
-        with st.spinner("Completing Google Sign-In..."):
-            ok_oauth, oauth_email, err_detail = database.exchange_supabase_oauth_code(auth_code, state=state_token)
-    else:
-        ok_oauth, oauth_email, err_detail = False, None, "Database module updating. Please refresh."
-    if ok_oauth and oauth_email:
-        c_path = get_path(oauth_email, "chats")
-        is_new_user = not os.path.exists(c_path)
-        if is_new_user:
-            st.session_state.welcome_msg = "🎉 Welcome to Krishna AI! Your account is ready."
-        else:
-            st.session_state.welcome_msg = "Welcome back!"
-
-        st.session_state.user       = oauth_email
-        st.session_state.chat_id    = None
-        st.session_state.login_time = time.time()
-        st.session_state.chats      = None
-        st.session_state.memory     = None
-        st.query_params.clear()
-        st.rerun()
-    else:
-        st.error(f"Authentication failed: {err_detail or 'Invalid or expired authorization code.'}")
-        st.query_params.clear()
 
 if "user" not in st.session_state:
 
@@ -1199,11 +1188,11 @@ if "user" not in st.session_state:
         border-bottom: 1.5px solid #c4b5fd !important;
     }
 
-    /* Primary Google OAuth Button Styling */
-    .google-signin-btn {
-        display: flex;
-        align-items: center;
-        justify-content: center;
+    /* Primary Google Button Styling */
+    div.st-key-btn_google_login > button {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
         background: rgba(255, 255, 255, 0.08) !important;
         border: 1px solid rgba(255, 255, 255, 0.22) !important;
         border-radius: 25px !important;
@@ -1215,11 +1204,10 @@ if "user" not in st.session_state:
         cursor: pointer !important;
         transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
         box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35) !important;
-        text-decoration: none !important;
         margin-bottom: 6px !important;
     }
 
-    .google-signin-btn:hover {
+    div.st-key-btn_google_login > button:hover {
         background: rgba(255, 255, 255, 0.16) !important;
         border-color: rgba(167, 139, 250, 0.6) !important;
         transform: translateY(-2px) !important;
@@ -1260,36 +1248,20 @@ if "user" not in st.session_state:
         """, unsafe_allow_html=True)
 
         # ── Primary: Continue with Google ──
-        if "oauth_url" not in st.session_state or not st.session_state.oauth_url:
-            ok_oauth, oauth_url = (
-                database.get_supabase_google_oauth_url()
-                if hasattr(database, "get_supabase_google_oauth_url")
-                else (False, "")
-            )
-            if ok_oauth and oauth_url:
-                st.session_state.oauth_url = oauth_url
-        else:
-            oauth_url = st.session_state.oauth_url
-            ok_oauth = bool(oauth_url)
-        if ok_oauth and oauth_url:
-            st.markdown(f"""
-            <a href="{oauth_url}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">
-                <div class="google-signin-btn">
-                    <svg width="18" height="18" viewBox="0 0 24 24" style="vertical-align:middle;margin-right:10px;">
-                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                    </svg>
-                    <span>Continue with Google</span>
-                </div>
-            </a>
-            <div style="display:flex;align-items:center;text-align:center;margin:18px 0 14px;">
-                <div style="flex-grow:1;height:1px;background:rgba(255,255,255,0.1);"></div>
-                <span style="padding:0 12px;color:rgba(255,255,255,0.45);font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">or continue with email code</span>
-                <div style="flex-grow:1;height:1px;background:rgba(255,255,255,0.1);"></div>
-            </div>
-            """, unsafe_allow_html=True)
+        if st.button("🌐  Continue with Google", key="btn_google_login", use_container_width=True):
+            try:
+                st.login()
+            except Exception as e:
+                logger.error(f"st.login() error: {e}")
+                st.error("Google Sign-In is initializing. Please verify [auth] configuration in secrets.")
+
+        st.markdown("""
+        <div style="display:flex;align-items:center;text-align:center;margin:18px 0 14px;">
+            <div style="flex-grow:1;height:1px;background:rgba(255,255,255,0.1);"></div>
+            <span style="padding:0 12px;color:rgba(255,255,255,0.45);font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">or continue with email code</span>
+            <div style="flex-grow:1;height:1px;background:rgba(255,255,255,0.1);"></div>
+        </div>
+        """, unsafe_allow_html=True)
 
         # ── Email Address Input ──
         st.markdown("<div class='login-field-label'>Email Address</div>", unsafe_allow_html=True)
@@ -1538,6 +1510,11 @@ with st.sidebar:
     if st.button("🚪  Logout", use_container_width=True):
         st.session_state.clear()
         st.query_params.clear()
+        if hasattr(st, "logout"):
+            try:
+                st.logout()
+            except Exception as e:
+                logger.warning(f"st.logout() notice: {e}")
         st.rerun()
 
     # Brand footer
