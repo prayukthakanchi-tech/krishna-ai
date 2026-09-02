@@ -466,12 +466,33 @@ This is an automated message. Please do not reply.
                     return True, ""
         except urllib.error.HTTPError as he:
             err_code = he.code
-            err_body = he.read().decode("utf-8", errors="ignore")
-            logger.error(f"Resend HTTP API Error {err_code}: {err_body[:120]}")
+            try:
+                err_body = he.read().decode("utf-8", errors="ignore")
+                err_json = json.loads(err_body)
+                err_name    = err_json.get("name", "")
+                err_message = err_json.get("message", "")[:200]
+                # Never log the Authorization header, OTP, or email address.
+                logger.error(f"Resend HTTP API Error {err_code} — name={err_name!r} message={err_message!r}")
+            except Exception:
+                logger.error(f"Resend HTTP API Error {err_code} (non-JSON response body)")
+                err_name = ""
+                err_message = ""
+
+            # 401/403 = API key or sender/domain configuration error.
+            # These are permanent errors — SMTP fallback is not appropriate.
             if err_code in (401, 403):
-                pass
+                logger.error(f"Resend configuration error (HTTP {err_code}). SMTP fallback suppressed.")
+                return False, "Email service configuration error. Please try again later or contact support."
+            # 422 = recipient/payload rejected — report specifically, do not fall back.
             elif err_code == 422:
-                return False, f"Email address '{cleaned_email}' was rejected."
+                return False, f"Email address '{cleaned_email}' was rejected by the mail service."
+            # 4xx other than above = client error, do not fall back to SMTP.
+            elif 400 <= err_code < 500:
+                logger.error(f"Resend client error HTTP {err_code}. SMTP fallback suppressed.")
+                return False, "Email service configuration error. Please try again later or contact support."
+            # 5xx = Resend server-side issue — fall back to SMTP.
+            else:
+                logger.warning(f"Resend server error HTTP {err_code}. Falling back to SMTP.")
         except Exception as e:
             logger.warning(f"Resend HTTP API delivery failed ({type(e).__name__}). Falling back to SMTP.")
 

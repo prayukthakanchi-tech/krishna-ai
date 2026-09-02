@@ -18,6 +18,7 @@ Run with:
 """
 
 import unittest
+import json
 import time
 import os
 import shutil
@@ -238,6 +239,68 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
                     ok, err = send_otp_email("user@example.com", "123456")
                     self.assertTrue(ok)
                     self.assertEqual(err, "")
+    def test_resend_403_domain_restriction_no_smtp_fallback(self):
+        """HTTP 403 (domain/sender restriction) must return config error, NOT Gmail error, and NOT create OTP state."""
+        import urllib.error
+        from unittest.mock import patch, MagicMock
+        from app import send_otp_email, _load_otp_state
+
+        err_response = json.dumps({
+            "name": "validation_error",
+            "message": "You can only send testing emails to your own email address. To send emails to other recipients, please verify a domain at resend.com/domains"
+        }).encode("utf-8")
+        http_403 = urllib.error.HTTPError(url=None, code=403, msg="Forbidden", hdrs={}, fp=None)
+        http_403.read = lambda: err_response
+
+        email = "other_user@gmail.com"
+        with patch("app.get_secret", side_effect=lambda k: "re_mock_key" if k == "RESEND_API_KEY" else None):
+            with patch("urllib.request.urlopen", side_effect=http_403):
+                ok, err = send_otp_email(email, "777777")
+                self.assertFalse(ok)
+                # Must be a safe generic message, NOT mentioning Gmail or App Password
+                self.assertNotIn("Gmail", err)
+                self.assertNotIn("App Password", err)
+                self.assertIn("configuration error", err)
+                # OTP state must NOT be created
+                state = _load_otp_state()
+                self.assertNotIn(email, state)
+
+    def test_resend_401_auth_failure_no_smtp_fallback(self):
+        """HTTP 401 (invalid API key) must return config error, NOT fall back to SMTP."""
+        import urllib.error
+        from unittest.mock import patch
+        from app import send_otp_email
+
+        http_401 = urllib.error.HTTPError(url=None, code=401, msg="Unauthorized", hdrs={}, fp=None)
+        http_401.read = lambda: b'{"name":"missing_api_key","message":"API key is required"}'
+
+        with patch("app.get_secret", side_effect=lambda k: "re_invalid_key" if k == "RESEND_API_KEY" else None):
+            with patch("urllib.request.urlopen", side_effect=http_401):
+                ok, err = send_otp_email("user@example.com", "888888")
+                self.assertFalse(ok)
+                self.assertNotIn("Gmail", err)
+                self.assertIn("configuration error", err)
+
+    def test_resend_5xx_falls_back_to_smtp(self):
+        """HTTP 5xx (Resend server error) should fall back to SMTP."""
+        import urllib.error
+        import smtplib
+        from unittest.mock import patch, MagicMock
+        from app import send_otp_email
+
+        http_500 = urllib.error.HTTPError(url=None, code=500, msg="Server Error", hdrs={}, fp=None)
+        http_500.read = lambda: b'{"message":"Internal server error"}'
+
+        mock_smtp_587 = MagicMock()
+        mock_smtp_587.__enter__.return_value = mock_smtp_587
+
+        with patch("app.get_secret", side_effect=lambda k: "re_mock_key" if k == "RESEND_API_KEY" else ("user@gmail.com" if k == "EMAIL" else ("pass" if k == "PASSWORD" else None))):
+            with patch("urllib.request.urlopen", side_effect=http_500):
+                with patch("smtplib.SMTP_SSL", side_effect=smtplib.SMTPConnectError(421, b"blocked")):
+                    with patch("smtplib.SMTP", return_value=mock_smtp_587):
+                        ok, err = send_otp_email("user@example.com", "999999")
+                        self.assertTrue(ok)
+                        self.assertEqual(err, "")
 
 
 if __name__ == "__main__":
