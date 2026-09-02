@@ -83,8 +83,10 @@ def get_secret(key: str) -> str | None:
     if value:
         return value
     try:
-        return st.secrets.get(key, None)
-    except Exception:
+        val = st.secrets.get(key, None)
+        return val
+    except Exception as e:
+        logger.warning(f"st.secrets lookup for '{key}' raised {type(e).__name__}: {e}")
         return None
 
 
@@ -435,6 +437,8 @@ This is an automated message. Please do not reply.
 </body>
 </html>
 """
+
+    logger.info(f"OTP delivery: RESEND_API_KEY={'set' if resend_key else 'missing'}, EMAIL={'set' if sender_email else 'missing'}, PASSWORD={'set' if sender_password else 'missing'}")
 
     # ── Tier 1: Transactional HTTP API (Resend) ──
     if resend_key:
