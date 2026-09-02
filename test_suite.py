@@ -48,9 +48,11 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
         self.orig_otp_file = database.OTP_STATE_FILE
         self.orig_json_path = database.get_json_chat_path
         self.orig_memory_path = database.get_json_memory_path
+        self.orig_oauth_file = getattr(database, "OAUTH_PKCE_FILE", None)
 
         # Monkey-patch database data directory for tests
         database.OTP_STATE_FILE = os.path.join(self.test_data_dir, "_otp_state.json")
+        database.OAUTH_PKCE_FILE = os.path.join(self.test_data_dir, "_oauth_pkce.json")
         database.get_json_chat_path = lambda email: os.path.join(self.test_data_dir, f"{safe_filename(email)}_chats.json")
         database.get_json_memory_path = lambda email: os.path.join(self.test_data_dir, f"{safe_filename(email)}_memory.json")
 
@@ -58,6 +60,8 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
         database.OTP_STATE_FILE = self.orig_otp_file
         database.get_json_chat_path = self.orig_json_path
         database.get_json_memory_path = self.orig_memory_path
+        if self.orig_oauth_file:
+            database.OAUTH_PKCE_FILE = self.orig_oauth_file
         if os.path.exists(self.test_data_dir):
             shutil.rmtree(self.test_data_dir, ignore_errors=True)
 
@@ -459,6 +463,137 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
         self.assertIn("[Career] Final-year ECE student", prompt)
         self.assertIn("[Preference] Prefers concise", prompt)
         self.assertIn("NEVER announce that you are reading from memory", prompt)
+
+
+    # ── 10. SUPABASE GOOGLE OAUTH & DATA COMPATIBILITY TESTS ──
+    def test_oauth_pkce_generation(self):
+        import base64
+        import hashlib
+        verifier, challenge = database.create_oauth_pkce_challenge()
+        self.assertTrue(len(verifier) >= 43)
+        self.assertTrue(len(challenge) >= 43)
+        self.assertNotIn("=", challenge)  # Must be unpadded base64url
+
+        # Verify challenge matches SHA-256 of verifier
+        expected_digest = hashlib.sha256(verifier.encode("ascii")).digest()
+        expected_challenge = base64.urlsafe_b64encode(expected_digest).decode("ascii").rstrip("=")
+        self.assertEqual(challenge, expected_challenge)
+
+    def test_oauth_authorization_url_generation(self):
+        from unittest.mock import patch
+        with patch("database.get_supabase_credentials", return_value=("https://mock.supabase.co", "mock_key")):
+            ok, oauth_url = database.get_supabase_google_oauth_url("https://mock.app")
+            self.assertTrue(ok)
+            self.assertIn("https://mock.supabase.co/auth/v1/authorize", oauth_url)
+            self.assertIn("provider=google", oauth_url)
+            self.assertIn("code_challenge=", oauth_url)
+            self.assertIn("code_challenge_method=s256", oauth_url)
+
+    def test_oauth_code_exchange_success_mock(self):
+        from unittest.mock import patch, MagicMock
+
+        # Setup pending verifier
+        verifier = "mock_verifier_123456789012345678901234567890"
+        database.save_pending_pkce_verifier(verifier)
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "access_token": "mock_token",
+            "token_type": "bearer",
+            "user": {
+                "id": "mock_user_uuid",
+                "email": "GoogleUser@Example.com"
+            }
+        }
+
+        with patch("database.get_supabase_credentials", return_value=("https://mock.supabase.co", "mock_key")):
+            with patch("requests.post", return_value=mock_resp):
+                ok, email, err = database.exchange_supabase_oauth_code("mock_auth_code_xyz")
+                self.assertTrue(ok)
+                self.assertEqual(email, "googleuser@example.com")  # Normalized
+                self.assertIsNone(err)
+
+    def test_oauth_code_exchange_failure_mock(self):
+        from unittest.mock import patch, MagicMock
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 400
+        mock_resp.text = '{"error":"invalid_grant","error_description":"Invalid code"}'
+
+        with patch("database.get_supabase_credentials", return_value=("https://mock.supabase.co", "mock_key")):
+            with patch("requests.post", return_value=mock_resp):
+                ok, email, err = database.exchange_supabase_oauth_code("invalid_code")
+                self.assertFalse(ok)
+                self.assertIsNone(email)
+                self.assertIn("Authentication failed", err)
+
+    def test_oauth_existing_user_data_compatibility(self):
+        """
+        Verify that a user who has existing chats and memories (from OTP login)
+        retains ALL data when authenticating via Google OAuth (same email).
+        """
+        email = "shared_identity@gmail.com"
+
+        # 1. Simulate prior existence of chats and memories under email
+        chats = {
+            "Spiritual Conversation": [
+                {"role": "user", "content": "How do I deal with burnout?", "timestamp": "10:00 AM"},
+                {"role": "assistant", "content": "Act without longing for fruit.", "timestamp": "10:01 AM"}
+            ]
+        }
+        database.save_user_chats(email, chats)
+        database.save_user_memory(email, "User is a senior engineer experiencing burnout.", category="career", importance=8)
+
+        # 2. Simulate OAuth login returning this email
+        from unittest.mock import patch, MagicMock
+        verifier = "verifier_compat_test"
+        database.save_pending_pkce_verifier(verifier)
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "access_token": "mock_oauth_token",
+            "user": {"email": "Shared_Identity@gmail.com"}  # mixed case from Google
+        }
+
+        with patch("database.get_supabase_credentials", return_value=("https://mock.supabase.co", "mock_key")):
+            with patch("requests.post", return_value=mock_resp):
+                ok, auth_email, _ = database.exchange_supabase_oauth_code("auth_code_123")
+                self.assertTrue(ok)
+                self.assertEqual(auth_email, email)
+
+        # 3. Load user's chats and memories using the authenticated email
+        loaded_chats = database.load_user_chats(auth_email)
+        loaded_memories = database.load_user_memories(auth_email)
+
+        self.assertIn("Spiritual Conversation", loaded_chats)
+        self.assertEqual(len(loaded_chats["Spiritual Conversation"]), 2)
+        self.assertEqual(len(loaded_memories), 1)
+        self.assertEqual(loaded_memories[0]["category"], "career")
+        self.assertIn("burnout", loaded_memories[0]["memory_text"])
+
+    def test_otp_and_oauth_coexistence(self):
+        """
+        Verify OTP creation, attempt tracking, verification, and cooldown continue to work
+        independently while OAuth is active.
+        """
+        test_email = "otp_coexist@example.com"
+
+        # Test OTP flow
+        self.assertTrue(otp_can_send(test_email)[0])
+        otp = generate_otp(6)
+        otp_create(test_email, otp)
+        self.assertFalse(otp_can_send(test_email)[0])  # Cooldown active
+
+        # Wrong OTP attempt
+        bad_ok, bad_err = otp_verify(test_email, "000000")
+        self.assertFalse(bad_ok)
+        self.assertIn("Wrong OTP", bad_err)
+
+        # Correct OTP
+        good_ok, _ = otp_verify(test_email, otp)
+        self.assertTrue(good_ok)
 
 
 if __name__ == "__main__":

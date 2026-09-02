@@ -17,6 +17,9 @@ import os
 import re
 import time
 import requests
+import hashlib
+import base64
+import secrets
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List, Tuple
 
@@ -24,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 DATA_DIR = "data"
 OTP_STATE_FILE = os.path.join(DATA_DIR, "_otp_state.json")
+OAUTH_PKCE_FILE = os.path.join(DATA_DIR, "_oauth_pkce.json")
 
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -111,6 +115,150 @@ def _supabase_request(method: str, endpoint: str, data: Optional[Any] = None, pa
     except Exception as e:
         logger.error(f"Supabase HTTP connection error: {e}")
         return False, str(e)
+
+
+# ─────────────────────────────────────────────
+# SUPABASE GOOGLE OAUTH HELPERS (PKCE FLOW)
+# ─────────────────────────────────────────────
+def create_oauth_pkce_challenge() -> Tuple[str, str]:
+    """
+    Generate PKCE code_verifier and code_challenge according to RFC 7636.
+    Uses crypto-random secrets and SHA-256 with URL-safe base64 encoding without padding.
+    """
+    verifier = secrets.token_urlsafe(64)
+    hashed = hashlib.sha256(verifier.encode("ascii")).digest()
+    challenge = base64.urlsafe_b64encode(hashed).decode("ascii").rstrip("=")
+    return verifier, challenge
+
+
+def save_pending_pkce_verifier(verifier: str) -> None:
+    """Store PKCE verifiers temporarily server-side in local JSON (max 15 min lifetime)."""
+    now = time.time()
+    existing = load_json_file(OAUTH_PKCE_FILE)
+    records = []
+    if isinstance(existing, list):
+        records = [
+            v for v in existing
+            if isinstance(v, dict) and now - float(v.get("created_at", 0)) < 900
+        ]
+    records.append({"verifier": verifier, "created_at": now})
+    save_json_file(OAUTH_PKCE_FILE, records[-10:])
+
+
+def get_site_url() -> str:
+    """Determine site URL for OAuth redirect (Streamlit Secrets / ENV / default)."""
+    url = os.getenv("SITE_URL")
+    if not url:
+        try:
+            import streamlit as st
+            url = st.secrets.get("SITE_URL")
+        except Exception:
+            pass
+    if url:
+        return url.rstrip("/")
+    return "https://krishna-ai.streamlit.app"
+
+
+def get_supabase_google_oauth_url(redirect_uri: Optional[str] = None) -> Tuple[bool, str]:
+    """
+    Generate the Supabase Auth Google OAuth authorization URL using PKCE.
+    Stores the PKCE verifier server-side and returns the authorization URL.
+    """
+    url, key = get_supabase_credentials()
+    if not url or not key:
+        return False, ""
+
+    import urllib.parse
+    target_redirect = redirect_uri or get_site_url()
+    verifier, challenge = create_oauth_pkce_challenge()
+    save_pending_pkce_verifier(verifier)
+
+    params = {
+        "provider": "google",
+        "redirect_to": target_redirect,
+        "code_challenge": challenge,
+        "code_challenge_method": "s256"
+    }
+    encoded = urllib.parse.urlencode(params)
+    oauth_url = f"{url.rstrip('/')}/auth/v1/authorize?{encoded}"
+    return True, oauth_url
+
+
+def exchange_supabase_oauth_code(auth_code: str) -> Tuple[bool, Optional[str], Optional[str]]:
+    """
+    Exchange authorization code for user session with Supabase Auth.
+    Verifies code via PKCE grant against Supabase /auth/v1/token.
+    Returns (success, user_email, error_message). Never logs tokens.
+    """
+    url, key = get_supabase_credentials()
+    if not url or not key:
+        return False, None, "Supabase credentials missing"
+
+    now = time.time()
+    existing = load_json_file(OAUTH_PKCE_FILE)
+    valid_verifiers = []
+    if isinstance(existing, list):
+        valid_verifiers = [
+            v.get("verifier") for v in existing
+            if isinstance(v, dict) and now - float(v.get("created_at", 0)) < 900 and v.get("verifier")
+        ]
+
+    target_url = f"{url.rstrip('/')}/auth/v1/token?grant_type=pkce"
+    headers = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json"
+    }
+
+    last_err = "No valid PKCE verifier found"
+    for verifier in reversed(valid_verifiers):
+        payload = {
+            "auth_code": auth_code,
+            "code_verifier": verifier
+        }
+        try:
+            res = requests.post(target_url, headers=headers, json=payload, timeout=10)
+            if res.status_code == 200:
+                data = res.json()
+                user_info = data.get("user") or {}
+                user_email = user_info.get("email")
+                if user_email:
+                    cleaned_email = user_email.strip().lower()
+                    # Remove used verifier
+                    remaining = [
+                        v for v in existing
+                        if isinstance(v, dict) and v.get("verifier") != verifier
+                    ]
+                    save_json_file(OAUTH_PKCE_FILE, remaining)
+                    # Ensure user exists in public.users
+                    _supabase_request("POST", "users", data={"email": cleaned_email}, params={"on_conflict": "email"})
+                    return True, cleaned_email, None
+            else:
+                last_err = f"Supabase Auth status {res.status_code}"
+        except Exception as e:
+            last_err = type(e).__name__
+
+    # Fallback attempt with authorization_code grant
+    try:
+        res = requests.post(
+            f"{url.rstrip('/')}/auth/v1/token?grant_type=authorization_code",
+            headers=headers,
+            json={"code": auth_code},
+            timeout=10
+        )
+        if res.status_code == 200:
+            data = res.json()
+            user_info = data.get("user") or {}
+            user_email = user_info.get("email")
+            if user_email:
+                cleaned_email = user_email.strip().lower()
+                _supabase_request("POST", "users", data={"email": cleaned_email}, params={"on_conflict": "email"})
+                return True, cleaned_email, None
+    except Exception:
+        pass
+
+    logger.error(f"OAuth code exchange failed ({last_err})")
+    return False, None, "Authentication failed. Please try signing in again."
 
 
 # ─────────────────────────────────────────────
