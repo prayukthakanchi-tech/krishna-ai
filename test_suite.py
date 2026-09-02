@@ -176,10 +176,9 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
         self.assertNotIn("<script>", escaped)
         self.assertIn("&lt;script&gt;", escaped)
 
-    # ── 8. EMAIL & OTP FAILURE HANDLING ──
+    # ── 8. EMAIL & OTP FAILURE & FALLBACK HANDLING ──
     def test_send_otp_email_unconfigured_credentials(self):
         from app import send_otp_email
-        # Ensure invalid credentials return False cleanly
         ok, err = send_otp_email("test@example.com", "123456")
         self.assertFalse(ok)
         self.assertTrue(len(err) > 0)
@@ -195,9 +194,50 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
         email = "failed_delivery@gmail.com"
         ok, err = send_otp_email(email, "999999")
         self.assertFalse(ok)
-        # Verify OTP state was NOT created on delivery failure
         state = _load_otp_state()
         self.assertNotIn(email, state)
+
+    def test_resend_api_success_mock(self):
+        from unittest.mock import patch, MagicMock
+        from app import send_otp_email
+
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.__enter__.return_value = mock_resp
+
+        with patch("app.get_secret", side_effect=lambda k: "re_mock_key" if k == "RESEND_API_KEY" else None):
+            with patch("urllib.request.urlopen", return_value=mock_resp):
+                ok, err = send_otp_email("user@example.com", "123456")
+                self.assertTrue(ok)
+                self.assertEqual(err, "")
+
+    def test_smtp_ssl_success_mock(self):
+        from unittest.mock import patch, MagicMock
+        from app import send_otp_email
+
+        mock_smtp = MagicMock()
+        mock_smtp.__enter__.return_value = mock_smtp
+
+        with patch("app.get_secret", side_effect=lambda k: "user@gmail.com" if k == "EMAIL" else ("pass" if k == "PASSWORD" else None)):
+            with patch("smtplib.SMTP_SSL", return_value=mock_smtp):
+                ok, err = send_otp_email("user@example.com", "123456")
+                self.assertTrue(ok)
+                self.assertEqual(err, "")
+
+    def test_smtp_starttls_fallback_mock(self):
+        import smtplib
+        from unittest.mock import patch, MagicMock
+        from app import send_otp_email
+
+        mock_smtp_587 = MagicMock()
+        mock_smtp_587.__enter__.return_value = mock_smtp_587
+
+        with patch("app.get_secret", side_effect=lambda k: "user@gmail.com" if k == "EMAIL" else ("pass" if k == "PASSWORD" else None)):
+            with patch("smtplib.SMTP_SSL", side_effect=smtplib.SMTPConnectError(421, b"Port 465 blocked")):
+                with patch("smtplib.SMTP", return_value=mock_smtp_587):
+                    ok, err = send_otp_email("user@example.com", "123456")
+                    self.assertTrue(ok)
+                    self.assertEqual(err, "")
 
 
 if __name__ == "__main__":

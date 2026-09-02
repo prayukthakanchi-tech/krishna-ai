@@ -447,9 +447,9 @@ This is an automated message. Please do not reply.
                 "Authorization": f"Bearer {resend_key}",
                 "Content-Type": "application/json"
             }
-            from_email = sender_email if (sender_email and "resend.dev" not in sender_email) else "onboarding@resend.dev"
+            resend_from = get_secret("RESEND_FROM_EMAIL") or "onboarding@resend.dev"
             payload = {
-                "from": f"Krishna AI <{from_email}>",
+                "from": f"Krishna AI <{resend_from}>",
                 "to": [cleaned_email],
                 "subject": f"{otp} is your Krishna AI verification code",
                 "html": html_body,
