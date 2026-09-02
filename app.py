@@ -1266,7 +1266,7 @@ if "user" not in st.session_state:
         )
         if ok_oauth and oauth_url:
             st.markdown(f"""
-            <a href="{oauth_url}" target="_self" style="text-decoration:none;">
+            <a href="{oauth_url}" target="_top" style="text-decoration:none;">
                 <div class="google-signin-btn">
                     <svg width="18" height="18" viewBox="0 0 24 24" style="vertical-align:middle;margin-right:10px;">
                         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
