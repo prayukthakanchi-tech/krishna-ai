@@ -17,6 +17,7 @@ import os
 import re
 import time
 import requests
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List, Tuple
 
 logger = logging.getLogger(__name__)
@@ -274,3 +275,279 @@ def save_otp_state(state: dict) -> None:
                 _supabase_request("POST", "otp_records", data=records, params={"on_conflict": "email"})
         except Exception as e:
             logger.error(f"Error syncing OTP state to Supabase: {e}")
+
+
+# ─────────────────────────────────────────────
+# V2 LONG-TERM MEMORY STORAGE INTERFACE
+# ─────────────────────────────────────────────
+MEMORY_CATEGORIES = {
+    "profile", "preference", "goal", "career", "education",
+    "relationship", "habit", "interest", "ongoing_context", "other"
+}
+
+
+def get_json_memory_path(email: str) -> str:
+    """Return local path for user memory JSON file."""
+    return os.path.join(DATA_DIR, f"{_safe_filename(email)}_memory.json")
+
+
+def load_user_memories(email: str) -> List[Dict[str, Any]]:
+    """
+    Load structured long-term memories for a specific user email.
+    Enforces strict authorization: users can ONLY access their own memories.
+    Auto-migrates legacy string-list JSON formats with a non-destructive backup.
+    """
+    cleaned_email = email.strip().lower()
+    if not cleaned_email:
+        return []
+
+    if is_supabase_enabled():
+        ok, res = _supabase_request(
+            "GET", "memories",
+            params={
+                "user_email": f"eq.{cleaned_email}",
+                "select": "id,user_email,memory_text,category,importance,created_at,updated_at",
+                "order": "importance.desc,updated_at.desc"
+            }
+        )
+        if ok and isinstance(res, list):
+            return res
+        else:
+            logger.info("Supabase memories fetch returned empty or failed; falling back to JSON storage.")
+
+    # Local JSON Fallback with Non-Destructive Legacy Migration
+    path = get_json_memory_path(cleaned_email)
+    if not os.path.exists(path):
+        return []
+
+    loaded = load_json_file(path)
+    if not loaded:
+        return []
+
+    # Check for legacy string-list format: ["User is a student...", ...]
+    if isinstance(loaded, list) and len(loaded) > 0 and isinstance(loaded[0], str):
+        logger.info(f"Migrating legacy memory list format for {cleaned_email} non-destructively.")
+        backup_path = path + ".legacy_backup"
+        if not os.path.exists(backup_path):
+            save_json_file(backup_path, loaded)
+
+        structured_memories = []
+        now_iso = datetime.now(timezone.utc).isoformat()
+        for idx, item_str in enumerate(loaded):
+            if isinstance(item_str, str) and item_str.strip():
+                structured_memories.append({
+                    "id": f"legacy_{idx}_{int(time.time())}",
+                    "user_email": cleaned_email,
+                    "memory_text": item_str.strip(),
+                    "category": "profile",
+                    "importance": 5,
+                    "created_at": now_iso,
+                    "updated_at": now_iso
+                })
+        save_json_file(path, structured_memories)
+        return structured_memories
+
+    if isinstance(loaded, list):
+        valid_memories = []
+        for m in loaded:
+            if isinstance(m, dict) and m.get("memory_text"):
+                valid_memories.append({
+                    "id": str(m.get("id") or f"mem_{int(time.time()*1000)}"),
+                    "user_email": cleaned_email,
+                    "memory_text": str(m.get("memory_text", "")).strip(),
+                    "category": m.get("category") if m.get("category") in MEMORY_CATEGORIES else "other",
+                    "importance": int(m.get("importance", 5)),
+                    "created_at": m.get("created_at") or datetime.now(timezone.utc).isoformat(),
+                    "updated_at": m.get("updated_at") or datetime.now(timezone.utc).isoformat()
+                })
+        return valid_memories
+
+    return []
+
+
+def save_user_memory(
+    email: str,
+    memory_text: str,
+    category: str = "other",
+    importance: int = 5,
+    memory_id: Optional[str] = None
+) -> Tuple[bool, Dict[str, Any]]:
+    """
+    Save or upsert a structured memory for a user.
+    """
+    cleaned_email = email.strip().lower()
+    clean_text = memory_text.strip()
+    if not cleaned_email or not clean_text:
+        return False, {}
+
+    cat = category if category in MEMORY_CATEGORIES else "other"
+    imp = max(1, min(10, int(importance)))
+    now_iso = datetime.now(timezone.utc).isoformat()
+    mem_id = memory_id or f"mem_{int(time.time()*1000)}"
+
+    memory_record = {
+        "id": mem_id,
+        "user_email": cleaned_email,
+        "memory_text": clean_text,
+        "category": cat,
+        "importance": imp,
+        "created_at": now_iso,
+        "updated_at": now_iso
+    }
+
+    # Save to local JSON
+    path = get_json_memory_path(cleaned_email)
+    current_memories = load_user_memories(cleaned_email)
+
+    updated = False
+    for i, m in enumerate(current_memories):
+        if m.get("id") == mem_id:
+            memory_record["created_at"] = m.get("created_at", now_iso)
+            current_memories[i] = memory_record
+            updated = True
+            break
+    if not updated:
+        current_memories.append(memory_record)
+
+    save_json_file(path, current_memories)
+
+    # Sync to Supabase
+    if is_supabase_enabled():
+        try:
+            _supabase_request("POST", "users", data={"email": cleaned_email}, params={"on_conflict": "email"})
+            _supabase_request("POST", "memories", data=memory_record, params={"on_conflict": "id"})
+        except Exception as e:
+            logger.error(f"Error syncing memory to Supabase: {e}")
+
+    return True, memory_record
+
+
+def update_user_memory(
+    email: str,
+    memory_id: str,
+    memory_text: str,
+    category: Optional[str] = None,
+    importance: Optional[int] = None
+) -> bool:
+    """
+    Update an existing memory verified by user_email and memory_id.
+    """
+    cleaned_email = email.strip().lower()
+    if not cleaned_email or not memory_id or not memory_text:
+        return False
+
+    current_memories = load_user_memories(cleaned_email)
+    target = None
+    for m in current_memories:
+        if m.get("id") == memory_id and m.get("user_email") == cleaned_email:
+            target = m
+            break
+
+    if not target:
+        return False
+
+    cat = category if (category and category in MEMORY_CATEGORIES) else target.get("category", "other")
+    imp = max(1, min(10, int(importance))) if importance is not None else target.get("importance", 5)
+
+    ok, _ = save_user_memory(
+        email=cleaned_email,
+        memory_text=memory_text,
+        category=cat,
+        importance=imp,
+        memory_id=memory_id
+    )
+    return ok
+
+
+def delete_user_memory(email: str, memory_id: str) -> bool:
+    """
+    Delete a single memory verified by user_email and memory_id.
+    """
+    cleaned_email = email.strip().lower()
+    if not cleaned_email or not memory_id:
+        return False
+
+    path = get_json_memory_path(cleaned_email)
+    current_memories = load_user_memories(cleaned_email)
+    filtered = [m for m in current_memories if m.get("id") != memory_id]
+    save_json_file(path, filtered)
+
+    if is_supabase_enabled():
+        try:
+            _supabase_request("DELETE", "memories", params={"id": f"eq.{memory_id}", "user_email": f"eq.{cleaned_email}"})
+        except Exception as e:
+            logger.error(f"Error deleting memory from Supabase: {e}")
+
+    return True
+
+
+def clear_user_memories(email: str) -> bool:
+    """
+    Clear all memories for a user.
+    """
+    cleaned_email = email.strip().lower()
+    if not cleaned_email:
+        return False
+
+    path = get_json_memory_path(cleaned_email)
+    save_json_file(path, [])
+
+    if is_supabase_enabled():
+        try:
+            _supabase_request("DELETE", "memories", params={"user_email": f"eq.{cleaned_email}"})
+        except Exception as e:
+            logger.error(f"Error clearing memories from Supabase: {e}")
+
+    return True
+
+
+def search_relevant_memories(email: str, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+    """
+    Relevance Search: Keyword token overlap + category weighting + importance scoring.
+    Zero vector embeddings or external vector database dependencies (pure ₹0-cost).
+    """
+    cleaned_email = email.strip().lower()
+    if not cleaned_email or not query:
+        return []
+
+    memories = load_user_memories(cleaned_email)
+    if not memories:
+        return []
+
+    # Tokenize query
+    stopwords = {
+        "a", "an", "the", "is", "are", "was", "were", "and", "or", "in", "on",
+        "at", "to", "for", "of", "with", "i", "my", "me", "you", "your", "what",
+        "how", "why", "can", "please", "krishna", "about", "tell", "give"
+    }
+    query_tokens = set(re.findall(r"\b[a-zA-Z0-9_]{2,}\b", query.lower())) - stopwords
+
+    if not query_tokens:
+        # If no specific keywords, return top memories by importance
+        sorted_memories = sorted(
+            memories,
+            key=lambda m: (m.get("importance", 5), m.get("updated_at", "")),
+            reverse=True
+        )
+        return sorted_memories[:limit]
+
+    scored = []
+    for m in memories:
+        text = m.get("memory_text", "").lower()
+        category = m.get("category", "other").lower()
+        mem_tokens = set(re.findall(r"\b[a-zA-Z0-9_]{2,}\b", text))
+
+        overlap = query_tokens.intersection(mem_tokens)
+        overlap_score = len(overlap) * 3.0
+
+        category_bonus = 2.0 if any(t in category for t in query_tokens) else 0.0
+        importance_weight = m.get("importance", 5) * 0.2
+
+        total_score = overlap_score + category_bonus + importance_weight
+
+        if overlap_score > 0 or category_bonus > 0 or m.get("importance", 5) >= 8:
+            scored.append((total_score, m))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [m for _, m in scored[:limit]]
+

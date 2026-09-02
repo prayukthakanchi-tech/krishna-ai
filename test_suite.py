@@ -47,14 +47,17 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
         os.makedirs(self.test_data_dir, exist_ok=True)
         self.orig_otp_file = database.OTP_STATE_FILE
         self.orig_json_path = database.get_json_chat_path
+        self.orig_memory_path = database.get_json_memory_path
 
         # Monkey-patch database data directory for tests
         database.OTP_STATE_FILE = os.path.join(self.test_data_dir, "_otp_state.json")
         database.get_json_chat_path = lambda email: os.path.join(self.test_data_dir, f"{safe_filename(email)}_chats.json")
+        database.get_json_memory_path = lambda email: os.path.join(self.test_data_dir, f"{safe_filename(email)}_memory.json")
 
     def tearDown(self):
         database.OTP_STATE_FILE = self.orig_otp_file
         database.get_json_chat_path = self.orig_json_path
+        database.get_json_memory_path = self.orig_memory_path
         if os.path.exists(self.test_data_dir):
             shutil.rmtree(self.test_data_dir, ignore_errors=True)
 
@@ -301,6 +304,161 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
                         ok, err = send_otp_email("user@example.com", "999999")
                         self.assertTrue(ok)
                         self.assertEqual(err, "")
+
+
+    # ── 9. V2 LONG-TERM MEMORY TESTS ──
+    def test_memory_creation_and_retrieval(self):
+        email = "mem_user@gmail.com"
+        ok, rec = database.save_user_memory(
+            email=email,
+            memory_text="User is a final-year ECE student preparing for AI roles.",
+            category="career",
+            importance=8
+        )
+        self.assertTrue(ok)
+        self.assertEqual(rec["user_email"], email)
+        self.assertEqual(rec["category"], "career")
+        self.assertEqual(rec["importance"], 8)
+        self.assertIn("created_at", rec)
+        self.assertIn("updated_at", rec)
+
+        memories = database.load_user_memories(email)
+        self.assertEqual(len(memories), 1)
+        self.assertEqual(memories[0]["id"], rec["id"])
+        self.assertEqual(memories[0]["memory_text"], "User is a final-year ECE student preparing for AI roles.")
+
+    def test_memory_relevance_search(self):
+        email = "search_user@gmail.com"
+        database.save_user_memory(email, "User prefers concise 1-sentence answers.", category="preference", importance=5)
+        database.save_user_memory(email, "User is studying for Groq and AI systems interviews.", category="career", importance=9)
+        database.save_user_memory(email, "User is practicing meditation and Karma Yoga daily.", category="habit", importance=7)
+
+        # Search for career/interview topic
+        results = database.search_relevant_memories(email, "Can you help me prepare for my AI interview?", limit=2)
+        self.assertTrue(len(results) > 0)
+        self.assertEqual(results[0]["category"], "career")
+        self.assertIn("interview", results[0]["memory_text"].lower())
+
+    def test_memory_update_and_deduplication(self):
+        email = "update_user@gmail.com"
+        ok, rec = database.save_user_memory(email, "User is focusing on frontend react roles.", category="career", importance=6)
+        self.assertTrue(ok)
+        mem_id = rec["id"]
+
+        # Update the existing memory
+        up_ok = database.update_user_memory(email, mem_id, "User is now focusing on AI engineering roles.", category="career", importance=8)
+        self.assertTrue(up_ok)
+
+        memories = database.load_user_memories(email)
+        self.assertEqual(len(memories), 1)  # No duplicate created
+        self.assertEqual(memories[0]["id"], mem_id)
+        self.assertEqual(memories[0]["memory_text"], "User is now focusing on AI engineering roles.")
+        self.assertEqual(memories[0]["importance"], 8)
+
+    def test_memory_deletion(self):
+        email = "delete_user@gmail.com"
+        _, m1 = database.save_user_memory(email, "Memory 1", category="profile")
+        _, m2 = database.save_user_memory(email, "Memory 2", category="profile")
+
+        self.assertEqual(len(database.load_user_memories(email)), 2)
+
+        del_ok = database.delete_user_memory(email, m1["id"])
+        self.assertTrue(del_ok)
+
+        remaining = database.load_user_memories(email)
+        self.assertEqual(len(remaining), 1)
+        self.assertEqual(remaining[0]["id"], m2["id"])
+
+    def test_memory_clear_all(self):
+        email = "clear_user@gmail.com"
+        database.save_user_memory(email, "Memory A")
+        database.save_user_memory(email, "Memory B")
+
+        self.assertEqual(len(database.load_user_memories(email)), 2)
+        database.clear_user_memories(email)
+        self.assertEqual(len(database.load_user_memories(email)), 0)
+
+    def test_memory_user_isolation(self):
+        user_a = "usera_mem@gmail.com"
+        user_b = "userb_mem@gmail.com"
+
+        _, m_a = database.save_user_memory(user_a, "User A secret career goal", category="career")
+        _, m_b = database.save_user_memory(user_b, "User B confidential personal context", category="profile")
+
+        mems_a = database.load_user_memories(user_a)
+        mems_b = database.load_user_memories(user_b)
+
+        # Strict isolation check
+        self.assertTrue(all(m["user_email"] == user_a for m in mems_a))
+        self.assertTrue(all(m["user_email"] == user_b for m in mems_b))
+        self.assertNotIn("User B", str(mems_a))
+        self.assertNotIn("User A", str(mems_b))
+
+        # Search isolation
+        search_a = database.search_relevant_memories(user_a, "confidential personal context")
+        self.assertEqual(len(search_a), 0)
+
+        # Cross-user delete prevention
+        del_attempt = database.delete_user_memory(user_a, m_b["id"])
+        mems_b_after = database.load_user_memories(user_b)
+        self.assertEqual(len(mems_b_after), 1)
+
+    def test_memory_heuristic_trigger_and_sensitive_data_protection(self):
+        from app import should_extract_memory
+
+        # Meaningful statements should trigger heuristic
+        self.assertTrue(should_extract_memory("I am a final-year ECE student preparing for software roles."))
+        self.assertTrue(should_extract_memory("My goal is to transition into AI engineering."))
+        self.assertTrue(should_extract_memory("I prefer concise, direct answers without sermons."))
+
+        # Transient, trivial questions or greetings should NOT trigger
+        self.assertFalse(should_extract_memory("hello"))
+        self.assertFalse(should_extract_memory("what is 2+2?"))
+        self.assertFalse(should_extract_memory("can you explain chapter 2 verse 47?"))
+
+        # Sensitive credentials MUST be blocked
+        self.assertFalse(should_extract_memory("my password is Secret123!"))
+        self.assertFalse(should_extract_memory("here is my otp: 654321"))
+        self.assertFalse(should_extract_memory("my api key is re_1234567890abcdef"))
+
+    def test_legacy_memory_migration_non_destructive(self):
+        email = "legacy_user@gmail.com"
+        mem_path = database.get_json_memory_path(email)
+
+        # Write legacy string list format
+        legacy_data = [
+            "User expressed feeling demotivated.",
+            "User values practical Bhagavad Gita wisdom."
+        ]
+        with open(mem_path, "w", encoding="utf-8") as f:
+            json.dump(legacy_data, f)
+
+        # Load should auto-migrate
+        migrated = database.load_user_memories(email)
+        self.assertEqual(len(migrated), 2)
+        self.assertIsInstance(migrated[0], dict)
+        self.assertEqual(migrated[0]["memory_text"], "User expressed feeling demotivated.")
+        self.assertEqual(migrated[0]["user_email"], email)
+
+        # Non-destructive legacy backup must exist
+        backup_path = mem_path + ".legacy_backup"
+        self.assertTrue(os.path.exists(backup_path))
+        with open(backup_path, "r", encoding="utf-8") as f:
+            backed_up = json.load(f)
+        self.assertEqual(backed_up, legacy_data)
+
+    def test_memory_prompt_injection(self):
+        from app import build_prompt
+
+        mock_mems = [
+            {"category": "career", "memory_text": "Final-year ECE student preparing for AI roles."},
+            {"category": "preference", "memory_text": "Prefers concise, actionable advice."}
+        ]
+        prompt = build_prompt(mock_mems)
+        self.assertIn("<seeker_context>", prompt)
+        self.assertIn("[Career] Final-year ECE student", prompt)
+        self.assertIn("[Preference] Prefers concise", prompt)
+        self.assertIn("NEVER announce that you are reading from memory", prompt)
 
 
 if __name__ == "__main__":
