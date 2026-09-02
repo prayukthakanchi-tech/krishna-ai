@@ -52,7 +52,9 @@ from email.mime.multipart import MIMEMultipart
 from groq import Groq
 from dotenv import load_dotenv
 import base64
+import importlib
 import database
+importlib.reload(database)
 
 # ─────────────────────────────────────────────
 # CONFIG & SECRETS
@@ -931,8 +933,11 @@ if oauth_err:
     st.error(f"Google Sign-In was not completed: {oauth_err}")
     st.query_params.clear()
 elif auth_code and "user" not in st.session_state:
-    with st.spinner("Completing Google Sign-In..."):
-        ok_oauth, oauth_email, err_detail = database.exchange_supabase_oauth_code(auth_code)
+    if hasattr(database, "exchange_supabase_oauth_code"):
+        with st.spinner("Completing Google Sign-In..."):
+            ok_oauth, oauth_email, err_detail = database.exchange_supabase_oauth_code(auth_code)
+    else:
+        ok_oauth, oauth_email, err_detail = False, None, "Database module updating. Please refresh."
     if ok_oauth and oauth_email:
         c_path = get_path(oauth_email, "chats")
         is_new_user = not os.path.exists(c_path)
@@ -1237,7 +1242,11 @@ if "user" not in st.session_state:
         """, unsafe_allow_html=True)
 
         # ── Primary: Continue with Google ──
-        ok_oauth, oauth_url = database.get_supabase_google_oauth_url()
+        ok_oauth, oauth_url = (
+            database.get_supabase_google_oauth_url()
+            if hasattr(database, "get_supabase_google_oauth_url")
+            else (False, "")
+        )
         if ok_oauth and oauth_url:
             st.markdown(f"""
             <a href="{oauth_url}" target="_self" style="text-decoration:none;">
