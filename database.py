@@ -131,18 +131,27 @@ def create_oauth_pkce_challenge() -> Tuple[str, str]:
     return verifier, challenge
 
 
-def save_pending_pkce_verifier(verifier: str) -> None:
-    """Store PKCE verifiers temporarily server-side in local JSON (max 15 min lifetime)."""
+def save_pending_pkce_verifier(state_token: str, verifier: str) -> None:
+    """Store PKCE verifier keyed by state token (server-side JSON, 15 min lifetime)."""
     now = time.time()
     existing = load_json_file(OAUTH_PKCE_FILE)
-    records = []
-    if isinstance(existing, list):
-        records = [
-            v for v in existing
-            if isinstance(v, dict) and now - float(v.get("created_at", 0)) < 900
-        ]
-    records.append({"verifier": verifier, "created_at": now})
-    save_json_file(OAUTH_PKCE_FILE, records[-10:])
+    if not isinstance(existing, dict):
+        existing = {}
+
+    # Purge expired verifiers (> 15 mins)
+    cleaned = {
+        s: v for s, v in existing.items()
+        if isinstance(v, dict) and now - float(v.get("created_at", 0)) < 900
+    }
+    cleaned[state_token] = {"verifier": verifier, "created_at": now}
+
+    # Cap to 100 active states (prevent unbounded growth)
+    if len(cleaned) > 100:
+        oldest_keys = sorted(cleaned.keys(), key=lambda k: cleaned[k].get("created_at", 0))[:len(cleaned) - 100]
+        for k in oldest_keys:
+            cleaned.pop(k, None)
+
+    save_json_file(OAUTH_PKCE_FILE, cleaned)
 
 
 def get_site_url() -> str:
@@ -162,7 +171,7 @@ def get_site_url() -> str:
 def get_supabase_google_oauth_url(redirect_uri: Optional[str] = None) -> Tuple[bool, str]:
     """
     Generate the Supabase Auth Google OAuth authorization URL using PKCE.
-    Stores the PKCE verifier server-side and returns the authorization URL.
+    Binds the PKCE verifier deterministically to a unique state token and returns the authorization URL.
     """
     url, key = get_supabase_credentials()
     if not url or not key:
@@ -170,24 +179,31 @@ def get_supabase_google_oauth_url(redirect_uri: Optional[str] = None) -> Tuple[b
 
     import urllib.parse
     target_redirect = redirect_uri or get_site_url()
+    state_token = secrets.token_urlsafe(32)
     verifier, challenge = create_oauth_pkce_challenge()
-    save_pending_pkce_verifier(verifier)
+    save_pending_pkce_verifier(state_token, verifier)
+
+    # Embed state in redirect_to AND pass state parameter for maximum compatibility
+    delimiter = "&" if "?" in target_redirect else "?"
+    redirect_with_state = f"{target_redirect}{delimiter}state={state_token}"
 
     params = {
         "provider": "google",
-        "redirect_to": target_redirect,
+        "redirect_to": redirect_with_state,
         "code_challenge": challenge,
-        "code_challenge_method": "s256"
+        "code_challenge_method": "s256",
+        "state": state_token
     }
     encoded = urllib.parse.urlencode(params)
     oauth_url = f"{url.rstrip('/')}/auth/v1/authorize?{encoded}"
     return True, oauth_url
 
 
-def exchange_supabase_oauth_code(auth_code: str) -> Tuple[bool, Optional[str], Optional[str]]:
+def exchange_supabase_oauth_code(auth_code: str, state: Optional[str] = None) -> Tuple[bool, Optional[str], Optional[str]]:
     """
     Exchange authorization code for user session with Supabase Auth.
-    Verifies code via PKCE grant against Supabase /auth/v1/token.
+    Deterministically looks up the PKCE verifier bound to the flow's state token.
+    Executes a single token exchange (no multiple trials) to prevent code burning.
     Returns (success, user_email, error_message). Never logs tokens.
     """
     url, key = get_supabase_credentials()
@@ -196,12 +212,26 @@ def exchange_supabase_oauth_code(auth_code: str) -> Tuple[bool, Optional[str], O
 
     now = time.time()
     existing = load_json_file(OAUTH_PKCE_FILE)
-    valid_verifiers = []
-    if isinstance(existing, list):
-        valid_verifiers = [
-            v.get("verifier") for v in existing
-            if isinstance(v, dict) and now - float(v.get("created_at", 0)) < 900 and v.get("verifier")
-        ]
+    if not isinstance(existing, dict):
+        existing = {}
+
+    target_verifier = None
+    if state and state in existing:
+        entry = existing.pop(state)
+        if now - float(entry.get("created_at", 0)) < 900:
+            target_verifier = entry.get("verifier")
+        save_json_file(OAUTH_PKCE_FILE, existing)
+    elif not state and len(existing) == 1:
+        # Fallback if only one single pending flow exists
+        only_state = next(iter(existing))
+        entry = existing.pop(only_state)
+        if now - float(entry.get("created_at", 0)) < 900:
+            target_verifier = entry.get("verifier")
+        save_json_file(OAUTH_PKCE_FILE, existing)
+
+    if not target_verifier:
+        logger.error(f"No valid PKCE verifier found for OAuth flow (state={state}).")
+        return False, None, "Authentication session expired or invalid. Please click Continue with Google again."
 
     target_url = f"{url.rstrip('/')}/auth/v1/token?grant_type=pkce"
     headers = {
@@ -209,56 +239,31 @@ def exchange_supabase_oauth_code(auth_code: str) -> Tuple[bool, Optional[str], O
         "Authorization": f"Bearer {key}",
         "Content-Type": "application/json"
     }
+    payload = {
+        "auth_code": auth_code,
+        "code_verifier": target_verifier
+    }
 
-    last_err = "No valid PKCE verifier found"
-    for verifier in reversed(valid_verifiers):
-        payload = {
-            "auth_code": auth_code,
-            "code_verifier": verifier
-        }
-        try:
-            res = requests.post(target_url, headers=headers, json=payload, timeout=10)
-            if res.status_code == 200:
-                data = res.json()
-                user_info = data.get("user") or {}
-                user_email = user_info.get("email")
-                if user_email:
-                    cleaned_email = user_email.strip().lower()
-                    # Remove used verifier
-                    remaining = [
-                        v for v in existing
-                        if isinstance(v, dict) and v.get("verifier") != verifier
-                    ]
-                    save_json_file(OAUTH_PKCE_FILE, remaining)
-                    # Ensure user exists in public.users
-                    _supabase_request("POST", "users", data={"email": cleaned_email}, params={"on_conflict": "email"})
-                    return True, cleaned_email, None
-            else:
-                last_err = f"Supabase Auth status {res.status_code}"
-        except Exception as e:
-            last_err = type(e).__name__
-
-    # Fallback attempt with authorization_code grant
     try:
-        res = requests.post(
-            f"{url.rstrip('/')}/auth/v1/token?grant_type=authorization_code",
-            headers=headers,
-            json={"code": auth_code},
-            timeout=10
-        )
+        res = requests.post(target_url, headers=headers, json=payload, timeout=10)
         if res.status_code == 200:
             data = res.json()
             user_info = data.get("user") or {}
-            user_email = user_info.get("email")
+            user_email = user_info.get("email") or user_info.get("user_metadata", {}).get("email")
             if user_email:
                 cleaned_email = user_email.strip().lower()
                 _supabase_request("POST", "users", data={"email": cleaned_email}, params={"on_conflict": "email"})
                 return True, cleaned_email, None
-    except Exception:
-        pass
-
-    logger.error(f"OAuth code exchange failed ({last_err})")
-    return False, None, "Authentication failed. Please try signing in again."
+            else:
+                return False, None, "No email returned by authentication provider."
+        else:
+            err_body = res.json() if res.content else {}
+            err_msg = err_body.get("error_description") or err_body.get("msg") or f"Status {res.status_code}"
+            logger.error(f"Supabase Auth exchange rejected ({res.status_code}): {err_msg}")
+            return False, None, f"Authentication failed: {err_msg}"
+    except Exception as e:
+        logger.error(f"OAuth code exchange network error: {e}")
+        return False, None, "Network error during authentication. Please try again."
 
 
 # ─────────────────────────────────────────────

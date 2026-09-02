@@ -498,9 +498,10 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
     def test_oauth_code_exchange_success_mock(self):
         from unittest.mock import patch, MagicMock
 
-        # Setup pending verifier
+        # Setup pending verifier with state
         verifier = "mock_verifier_123456789012345678901234567890"
-        database.save_pending_pkce_verifier(verifier)
+        state = "mock_state_123"
+        database.save_pending_pkce_verifier(state, verifier)
 
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -515,7 +516,7 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
 
         with patch("database.get_supabase_credentials", return_value=("https://mock.supabase.co", "mock_key")):
             with patch("requests.post", return_value=mock_resp):
-                ok, email, err = database.exchange_supabase_oauth_code("mock_auth_code_xyz")
+                ok, email, err = database.exchange_supabase_oauth_code("mock_auth_code_xyz", state=state)
                 self.assertTrue(ok)
                 self.assertEqual(email, "googleuser@example.com")  # Normalized
                 self.assertIsNone(err)
@@ -523,13 +524,17 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
     def test_oauth_code_exchange_failure_mock(self):
         from unittest.mock import patch, MagicMock
 
+        state = "fail_state_xyz"
+        database.save_pending_pkce_verifier(state, "fail_verifier")
+
         mock_resp = MagicMock()
         mock_resp.status_code = 400
-        mock_resp.text = '{"error":"invalid_grant","error_description":"Invalid code"}'
+        mock_resp.content = b'{"error":"invalid_grant","error_description":"Invalid code"}'
+        mock_resp.json.return_value = {"error": "invalid_grant", "error_description": "Invalid code"}
 
         with patch("database.get_supabase_credentials", return_value=("https://mock.supabase.co", "mock_key")):
             with patch("requests.post", return_value=mock_resp):
-                ok, email, err = database.exchange_supabase_oauth_code("invalid_code")
+                ok, email, err = database.exchange_supabase_oauth_code("invalid_code", state=state)
                 self.assertFalse(ok)
                 self.assertIsNone(email)
                 self.assertIn("Authentication failed", err)
@@ -554,7 +559,8 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
         # 2. Simulate OAuth login returning this email
         from unittest.mock import patch, MagicMock
         verifier = "verifier_compat_test"
-        database.save_pending_pkce_verifier(verifier)
+        state = "state_compat_test"
+        database.save_pending_pkce_verifier(state, verifier)
 
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -565,7 +571,7 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
 
         with patch("database.get_supabase_credentials", return_value=("https://mock.supabase.co", "mock_key")):
             with patch("requests.post", return_value=mock_resp):
-                ok, auth_email, _ = database.exchange_supabase_oauth_code("auth_code_123")
+                ok, auth_email, _ = database.exchange_supabase_oauth_code("auth_code_123", state=state)
                 self.assertTrue(ok)
                 self.assertEqual(auth_email, email)
 
@@ -578,6 +584,117 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
         self.assertEqual(len(loaded_memories), 1)
         self.assertEqual(loaded_memories[0]["category"], "career")
         self.assertIn("burnout", loaded_memories[0]["memory_text"])
+
+    def test_oauth_multi_account_state_isolation_and_binding(self):
+        """
+        Verify that Account A state binds to Account A verifier,
+        Account B state binds to Account B verifier,
+        and multiple overlapping flows do not collide.
+        """
+        from unittest.mock import patch, MagicMock
+
+        state_a = "state_account_a"
+        verifier_a = "verifier_for_a_1234567890"
+        state_b = "state_account_b"
+        verifier_b = "verifier_for_b_0987654321"
+
+        # Overlapping/concurrent initialization
+        database.save_pending_pkce_verifier(state_a, verifier_a)
+        database.save_pending_pkce_verifier(state_b, verifier_b)
+
+        captured_verifiers = []
+
+        def mock_post(url, **kwargs):
+            payload = kwargs.get("json", {})
+            captured_verifiers.append(payload.get("code_verifier"))
+            m = MagicMock()
+            m.status_code = 200
+            m.json.return_value = {
+                "access_token": "mock_token",
+                "user": {"email": "user_a@gmail.com" if payload.get("code_verifier") == verifier_a else "user_b@gmail.com"}
+            }
+            return m
+
+        with patch("database.get_supabase_credentials", return_value=("https://mock.supabase.co", "mock_key")):
+            with patch("requests.post", side_effect=mock_post):
+                # Account B exchanges first
+                ok_b, email_b, _ = database.exchange_supabase_oauth_code("code_b", state=state_b)
+                self.assertTrue(ok_b)
+                self.assertEqual(email_b, "user_b@gmail.com")
+                self.assertEqual(captured_verifiers[-1], verifier_b)
+
+                # Account A exchanges next
+                ok_a, email_a, _ = database.exchange_supabase_oauth_code("code_a", state=state_a)
+                self.assertTrue(ok_a)
+                self.assertEqual(email_a, "user_a@gmail.com")
+                self.assertEqual(captured_verifiers[-1], verifier_a)
+
+    def test_oauth_wrong_state_and_missing_state_handling(self):
+        """Wrong state must fail cleanly without making upstream HTTP calls."""
+        from unittest.mock import patch
+
+        database.save_pending_pkce_verifier("valid_state_1", "v1")
+        database.save_pending_pkce_verifier("valid_state_2", "v2")
+
+        with patch("database.get_supabase_credentials", return_value=("https://mock.supabase.co", "mock_key")):
+            with patch("requests.post") as mock_post:
+                # Wrong state
+                ok, email, err = database.exchange_supabase_oauth_code("some_code", state="non_existent_state")
+                self.assertFalse(ok)
+                self.assertIsNone(email)
+                self.assertIn("expired or invalid", err)
+                mock_post.assert_not_called()
+
+                # Missing state with multiple flows pending
+                ok2, email2, err2 = database.exchange_supabase_oauth_code("some_code", state=None)
+                self.assertFalse(ok2)
+                self.assertIsNone(email2)
+                self.assertIn("expired or invalid", err2)
+                mock_post.assert_not_called()
+
+    def test_oauth_replayed_state_is_rejected(self):
+        """A state cannot be replayed; it is consumed on the first exchange."""
+        from unittest.mock import patch, MagicMock
+
+        state = "single_use_state"
+        database.save_pending_pkce_verifier(state, "verifier_single_use")
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "access_token": "token",
+            "user": {"email": "first_login@gmail.com"}
+        }
+
+        with patch("database.get_supabase_credentials", return_value=("https://mock.supabase.co", "mock_key")):
+            with patch("requests.post", return_value=mock_resp):
+                # 1st attempt succeeds
+                ok1, _, _ = database.exchange_supabase_oauth_code("code_1", state=state)
+                self.assertTrue(ok1)
+
+                # 2nd attempt with same state must fail (consumed)
+                ok2, _, err2 = database.exchange_supabase_oauth_code("code_2", state=state)
+                self.assertFalse(ok2)
+                self.assertIn("expired or invalid", err2)
+
+    def test_oauth_single_token_exchange_attempt_no_code_burning(self):
+        """Verify that token endpoint is called at most once per exchange request."""
+        from unittest.mock import patch, MagicMock
+
+        state = "single_call_state"
+        database.save_pending_pkce_verifier(state, "single_call_verifier")
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 400
+        mock_resp.content = b'{"error":"invalid_grant"}'
+        mock_resp.json.return_value = {"error": "invalid_grant"}
+
+        with patch("database.get_supabase_credentials", return_value=("https://mock.supabase.co", "mock_key")):
+            with patch("requests.post", return_value=mock_resp) as mock_post:
+                ok, _, _ = database.exchange_supabase_oauth_code("code_single", state=state)
+                self.assertFalse(ok)
+                # MUST be called exactly once
+                self.assertEqual(mock_post.call_count, 1)
 
     def test_otp_and_oauth_coexistence(self):
         """

@@ -944,6 +944,7 @@ def message_footer_html(ts: str, content: str, is_assistant: bool) -> str:
 # ─────────────────────────────────────────────
 # Handle Supabase Google OAuth Callback via URL Query Parameters (PKCE flow)
 auth_code = st.query_params.get("code")
+state_token = st.query_params.get("state")
 oauth_err = st.query_params.get("error") or st.query_params.get("error_description")
 
 if oauth_err:
@@ -952,7 +953,7 @@ if oauth_err:
 elif auth_code and "user" not in st.session_state:
     if hasattr(database, "exchange_supabase_oauth_code"):
         with st.spinner("Completing Google Sign-In..."):
-            ok_oauth, oauth_email, err_detail = database.exchange_supabase_oauth_code(auth_code)
+            ok_oauth, oauth_email, err_detail = database.exchange_supabase_oauth_code(auth_code, state=state_token)
     else:
         ok_oauth, oauth_email, err_detail = False, None, "Database module updating. Please refresh."
     if ok_oauth and oauth_email:
@@ -1259,11 +1260,17 @@ if "user" not in st.session_state:
         """, unsafe_allow_html=True)
 
         # ── Primary: Continue with Google ──
-        ok_oauth, oauth_url = (
-            database.get_supabase_google_oauth_url()
-            if hasattr(database, "get_supabase_google_oauth_url")
-            else (False, "")
-        )
+        if "oauth_url" not in st.session_state or not st.session_state.oauth_url:
+            ok_oauth, oauth_url = (
+                database.get_supabase_google_oauth_url()
+                if hasattr(database, "get_supabase_google_oauth_url")
+                else (False, "")
+            )
+            if ok_oauth and oauth_url:
+                st.session_state.oauth_url = oauth_url
+        else:
+            oauth_url = st.session_state.oauth_url
+            ok_oauth = bool(oauth_url)
         if ok_oauth and oauth_url:
             st.markdown(f"""
             <a href="{oauth_url}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">
