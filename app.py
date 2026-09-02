@@ -466,17 +466,28 @@ This is an automated message. Please do not reply.
                     return True, ""
         except urllib.error.HTTPError as he:
             err_code = he.code
+            # Capture response metadata BEFORE reading body (headers are always safe to log)
+            resp_content_type = he.headers.get("Content-Type", "unknown") if he.headers else "unknown"
+            resp_server       = he.headers.get("Server", "unknown")       if he.headers else "unknown"
+            resp_content_len  = he.headers.get("Content-Length", "unknown") if he.headers else "unknown"
+            logger.error(
+                f"Resend HTTP {err_code} — "
+                f"Content-Type={resp_content_type!r} "
+                f"Server={resp_server!r} "
+                f"Content-Length={resp_content_len!r}"
+            )
+            err_name = ""
+            err_message = ""
             try:
                 err_body = he.read().decode("utf-8", errors="ignore")
-                err_json = json.loads(err_body)
+                # Log first 200 chars of body (response body never contains our secrets)
+                logger.error(f"Resend response body (first 200 chars): {err_body[:200]!r}")
+                err_json    = json.loads(err_body)
                 err_name    = err_json.get("name", "")
                 err_message = err_json.get("message", "")[:200]
-                # Never log the Authorization header, OTP, or email address.
-                logger.error(f"Resend HTTP API Error {err_code} — name={err_name!r} message={err_message!r}")
-            except Exception:
-                logger.error(f"Resend HTTP API Error {err_code} (non-JSON response body)")
-                err_name = ""
-                err_message = ""
+                logger.error(f"Resend error — name={err_name!r} message={err_message!r}")
+            except Exception as parse_err:
+                logger.error(f"Resend response body is non-JSON ({type(parse_err).__name__})")
 
             # 401/403 = API key or sender/domain configuration error.
             # These are permanent errors — SMTP fallback is not appropriate.
