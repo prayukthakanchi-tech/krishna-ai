@@ -1556,54 +1556,7 @@ with st.sidebar:
             unsafe_allow_html=True
         )
 
-    st.markdown("---")
 
-    # ── V2 Memory Management UI ──
-    user_mems = database.load_user_memories(user_email)
-    with st.expander(f"🧠 What Krishna Remembers ({len(user_mems)})", expanded=False):
-        if user_mems:
-            for mem in user_mems:
-                mem_id = mem.get("id")
-                cat = mem.get("category", "other").capitalize()
-                txt = mem.get("memory_text", "")
-
-                col_m1, col_m2 = st.columns([4.2, 0.8])
-                with col_m1:
-                    st.markdown(
-                        f"<div style='font-size:12px;color:#e4e4e7;margin-bottom:6px;line-height:1.4;background:rgba(255,255,255,0.03);padding:6px 8px;border-radius:6px;border-left:2px solid #a78bfa;'>"
-                        f"<span style='font-size:9px;font-weight:700;color:#a78bfa;text-transform:uppercase;letter-spacing:0.5px;'>{escape_for_html(cat)}</span><br>{escape_for_html(txt)}"
-                        f"</div>",
-                        unsafe_allow_html=True
-                    )
-                with col_m2:
-                    if st.button("🗑️", key=f"del_mem_{mem_id}", help="Delete this memory"):
-                        database.delete_user_memory(user_email, mem_id)
-                        st.rerun()
-
-            st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
-            if st.session_state.get("confirm_clear_memory"):
-                c_yes, c_no = st.columns(2)
-                with c_yes:
-                    if st.button("Confirm Clear", key="do_clear_mem", type="primary", use_container_width=True):
-                        database.clear_user_memories(user_email)
-                        st.session_state.confirm_clear_memory = False
-                        st.rerun()
-                with c_no:
-                    if st.button("Cancel", key="cancel_clear_mem", use_container_width=True):
-                        st.session_state.confirm_clear_memory = False
-                        st.rerun()
-            else:
-                if st.button("Clear All Memories", key="req_clear_mem", use_container_width=True):
-                    st.session_state.confirm_clear_memory = True
-                    st.rerun()
-        else:
-            st.markdown(
-                "<p style='font-size:11px;color:#71717a;text-align:center;margin:8px 0;'>"
-                "No memories stored yet. As you converse, Krishna will remember important goals and preferences.</p>",
-                unsafe_allow_html=True
-            )
-
-    st.markdown("---")
 
     # User info (UI-08: no session timer shown to users)
     st.markdown(
