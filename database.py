@@ -54,15 +54,20 @@ def load_json_file(path: str) -> Optional[Any]:
 
 
 def save_json_file(path: str, data: Any) -> bool:
-    try:
-        tmp = path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        os.replace(tmp, path)
-        return True
-    except OSError as e:
-        logger.error(f"Failed to write JSON file {path}: {e}")
-        return False
+    tmp = f"{path}.{secrets.token_hex(4)}.tmp"
+    for attempt in range(5):
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            os.replace(tmp, path)
+            return True
+        except OSError as e:
+            if attempt < 4:
+                time.sleep(0.02 * (attempt + 1))
+            else:
+                logger.error(f"Failed to write JSON file {path}: {e}")
+                return False
+    return False
 
 
 # ─────────────────────────────────────────────
@@ -204,12 +209,19 @@ def save_user_chats(email: str, chats: Dict[str, List[Dict[str, Any]]]) -> bool:
                 }
                 ok_c, res_c = _supabase_request("POST", "conversations", data=conv_payload, params={"on_conflict": "user_email,title"})
                 
+                conv_id = None
                 if ok_c and isinstance(res_c, list) and len(res_c) > 0:
                     conv_id = res_c[0].get("id")
-                    
+                elif "409" in str(res_c) or "already exists" in str(res_c):
+                    # Already exists in Supabase - retrieve existing conversation id
+                    ok_get, res_get = _supabase_request("GET", "conversations", params={"user_email": f"eq.{cleaned_email}", "title": f"eq.{cid}", "select": "id"})
+                    if ok_get and isinstance(res_get, list) and len(res_get) > 0:
+                        conv_id = res_get[0].get("id")
+
+                if conv_id:
                     # Delete old messages for this conversation to prevent duplicates
                     _supabase_request("DELETE", "messages", params={"conversation_id": f"eq.{conv_id}", "user_email": f"eq.{cleaned_email}"})
-                    
+
                     # Insert current messages
                     msg_batch = []
                     for m in msgs:

@@ -43,6 +43,7 @@ import os
 import re
 import secrets
 import smtplib
+import threading
 import time
 from datetime import datetime, timezone, timedelta
 
@@ -151,8 +152,6 @@ def get_krishna_icon() -> str:
     except FileNotFoundError:
         return ""
 
-
-GROQ_CLIENT  = get_groq_client()
 KRISHNA_ICON = get_krishna_icon()
 
 
@@ -217,12 +216,15 @@ def escape_for_data_attr(text: str) -> str:
 # SERVER-SIDE OTP STATE  (SEC-04, SEC-05, SEC-06)
 # ─────────────────────────────────────────────
 OTP_STATE_FILE = os.path.join(DATA_DIR, "_otp_state.json")
+# Thread lock: prevents TOCTOU races when ≥2 users request/verify OTPs concurrently
+# in the same Streamlit process (Streamlit Community Cloud is single-process).
+_OTP_LOCK = threading.Lock()
 
 
 def _load_otp_state() -> dict:
     try:
         if os.path.exists(OTP_STATE_FILE):
-            with open(OTP_STATE_FILE, "r") as f:
+            with open(OTP_STATE_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
     except (json.JSONDecodeError, OSError):
         pass
@@ -230,18 +232,24 @@ def _load_otp_state() -> dict:
 
 
 def _save_otp_state(state: dict) -> None:
-    try:
-        tmp = OTP_STATE_FILE + ".tmp"
-        with open(tmp, "w") as f:
-            json.dump(state, f)
-        os.replace(tmp, OTP_STATE_FILE)
-    except OSError as e:
-        logger.error(f"Failed to save OTP state: {e}")
+    tmp = f"{OTP_STATE_FILE}.{secrets.token_hex(4)}.tmp"
+    for attempt in range(5):
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(state, f)
+            os.replace(tmp, OTP_STATE_FILE)
+            return
+        except OSError as e:
+            if attempt < 4:
+                time.sleep(0.02 * (attempt + 1))
+            else:
+                logger.error(f"Failed to save OTP state: {e}")
 
 
 def otp_can_send(email: str) -> tuple[bool, int]:
     """Returns (can_send, seconds_remaining). Per-email, server-side."""
-    state = _load_otp_state()
+    with _OTP_LOCK:
+        state = _load_otp_state()
     entry = state.get(email, {})
     last_send = entry.get("last_send", 0)
     elapsed = time.time() - last_send
@@ -251,53 +259,58 @@ def otp_can_send(email: str) -> tuple[bool, int]:
 
 def otp_create(email: str, otp: str) -> None:
     """Store hashed OTP server-side, per email."""
-    state = _load_otp_state()
-    state[email] = {
-        "otp_hash":   hash_otp(otp),
-        "expires_at": time.time() + OTP_EXPIRY_SECONDS,
-        "attempts":   0,
-        "last_send":  time.time(),
-    }
-    _save_otp_state(state)
+    with _OTP_LOCK:
+        state = _load_otp_state()
+        state[email] = {
+            "otp_hash":   hash_otp(otp),
+            "expires_at": time.time() + OTP_EXPIRY_SECONDS,
+            "attempts":   0,
+            "last_send":  time.time(),
+        }
+        _save_otp_state(state)
 
 
 def otp_verify(email: str, entered: str) -> tuple[bool, str]:
     """
     Verify OTP. Returns (success, error_message).
     Attempt count is per-email and survives page refresh. (SEC-05)
+    Entire read-modify-write is held under _OTP_LOCK to prevent concurrent
+    verification races (e.g. duplicate tab submit). (CONC-01)
     """
-    state = _load_otp_state()
-    entry = state.get(email)
+    with _OTP_LOCK:
+        state = _load_otp_state()
+        entry = state.get(email)
 
-    if not entry:
-        return False, "No OTP found. Request one first."
+        if not entry:
+            return False, "No OTP found. Request one first."
 
-    if time.time() > entry["expires_at"]:
+        if time.time() > entry["expires_at"]:
+            del state[email]
+            _save_otp_state(state)
+            return False, "OTP expired. Request a new one."
+
+        if entry["attempts"] >= OTP_MAX_ATTEMPTS:
+            del state[email]
+            _save_otp_state(state)
+            return False, "Too many failed attempts. Request a new OTP."
+
+        if hash_otp(entered.strip()) != entry["otp_hash"]:
+            entry["attempts"] += 1
+            remaining = OTP_MAX_ATTEMPTS - entry["attempts"]
+            state[email] = entry
+            _save_otp_state(state)
+            return False, f"Wrong OTP — {remaining} attempt(s) left."
+
+        # Success — clear entry (single-use enforcement)
         del state[email]
         _save_otp_state(state)
-        return False, "OTP expired. Request a new one."
-
-    if entry["attempts"] >= OTP_MAX_ATTEMPTS:
-        del state[email]
-        _save_otp_state(state)
-        return False, "Too many failed attempts. Request a new OTP."
-
-    if hash_otp(entered.strip()) != entry["otp_hash"]:
-        entry["attempts"] += 1
-        remaining = OTP_MAX_ATTEMPTS - entry["attempts"]
-        state[email] = entry
-        _save_otp_state(state)
-        return False, f"Wrong OTP — {remaining} attempt(s) left."
-
-    # Success — clear entry
-    del state[email]
-    _save_otp_state(state)
-    return True, ""
+        return True, ""
 
 
 def otp_remaining_seconds(email: str) -> int:
     """Seconds until current OTP expires. 0 if none."""
-    state = _load_otp_state()
+    with _OTP_LOCK:
+        state = _load_otp_state()
     entry = state.get(email, {})
     expires_at = entry.get("expires_at", 0)
     return max(0, int(expires_at - time.time()))
@@ -323,14 +336,19 @@ def load_json_file(path: str):
 
 
 def save_json_file(path: str, data) -> None:
-    """Atomic write with temp file."""
-    try:
-        tmp = path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        os.replace(tmp, path)
-    except OSError as e:
-        logger.error(f"Failed to write {path}: {e}")
+    """Atomic write with unique temp file and retry on transient OS lock."""
+    tmp = f"{path}.{secrets.token_hex(4)}.tmp"
+    for attempt in range(5):
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            os.replace(tmp, path)
+            return
+        except OSError as e:
+            if attempt < 4:
+                time.sleep(0.02 * (attempt + 1))
+            else:
+                logger.error(f"Failed to write {path}: {e}")
 
 
 # ─────────────────────────────────────────────
@@ -948,13 +966,17 @@ except Exception as _e:
     _authlib_ver = f"error: {_e}"
 
 _star_opt = st.config.get_option("server.useStarlette")
-print(
-    f"[KRISHNA_DEPLOYED_ENV] Python={sys.version.split()[0]} | "
-    f"Streamlit={st.__version__} | "
-    f"Authlib={_authlib_ver} | "
-    f"useStarlette={_star_opt}",
-    flush=True
-)
+
+@st.cache_resource
+def _log_deployed_env_once():
+    logger.info(
+        f"[KRISHNA_DEPLOYED_ENV] Python={sys.version.split()[0]} | "
+        f"Streamlit={st.__version__} | "
+        f"Authlib={_authlib_ver} | "
+        f"useStarlette={_star_opt}"
+    )
+
+_log_deployed_env_once()
 
 # Intercept and log any low-level OAuth callback errors in Starlette/Tornado
 def _install_oauth_callback_diagnostics():
@@ -1073,288 +1095,172 @@ if "user" not in st.session_state:
         st.error("⚠️ GROQ_API_KEY is not configured. Add it in Streamlit Cloud > Settings > Secrets.")
         st.stop()
 
-    # Login section specific CSS — Original dark ambient theme
+    # Login section specific CSS — Clean, minimal, premium AI product styling
     st.markdown("""
     <style>
-    /* Revert to original dark background */
     .stApp {
         background: #05080f !important;
     }
 
-    /* PREMIUM GLASSMORPHISM AUTHENTICATION CARD */
+    /* Premium Minimal Authentication Card */
     div[data-testid="stColumn"]:nth-child(2) > div:first-child,
     div[data-testid="column"]:nth-child(2) > div:first-child,
     div.stColumn:nth-child(2) > div:first-child {
         position: relative !important;
         z-index: 10 !important;
         width: 100% !important;
-        max-width: 500px !important;
-        margin: 0 auto !important;
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(18, 14, 32, 0.55) 100%) !important;
-        border: 1px solid rgba(255, 255, 255, 0.22) !important;
-        border-top: 1.5px solid rgba(255, 255, 255, 0.4) !important;
+        max-width: 440px !important;
+        margin: 40px auto 0 !important;
+        background: linear-gradient(180deg, rgba(25, 22, 40, 0.70) 0%, rgba(13, 11, 24, 0.85) 100%) !important;
+        border: 1px solid rgba(167, 139, 250, 0.16) !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.2) !important;
         border-radius: 24px !important;
-        padding: 36px 44px 30px !important;
-        backdrop-filter: blur(35px) saturate(200%) !important;
-        -webkit-backdrop-filter: blur(35px) saturate(200%) !important;
+        padding: 44px 36px 36px !important;
+        backdrop-filter: blur(30px) !important;
+        -webkit-backdrop-filter: blur(30px) !important;
         box-shadow:
-            0 25px 65px rgba(0, 0, 0, 0.75),
-            0 0 60px rgba(167, 139, 250, 0.3),
-            inset 0 1.5px 1px rgba(255, 255, 255, 0.3),
-            inset 0 -1px 1px rgba(255, 255, 255, 0.05) !important;
-        animation: cardFadeIn 0.5s ease-out !important;
-    }
-
-    /* Tablet & Mobile Responsiveness */
-    @media (max-width: 768px) {
-        div[data-testid="stColumn"]:nth-child(2) > div:first-child,
-        div[data-testid="column"]:nth-child(2) > div:first-child,
-        div.stColumn:nth-child(2) > div:first-child {
-            max-width: 440px !important;
-            padding: 28px 30px !important;
-        }
-    }
-
-    @media (max-width: 480px) {
-        div[data-testid="stColumn"]:nth-child(2) > div:first-child,
-        div[data-testid="column"]:nth-child(2) > div:first-child,
-        div.stColumn:nth-child(2) > div:first-child {
-            width: calc(100% - 32px) !important;
-            padding: 24px 20px !important;
-        }
+            0 24px 60px rgba(0, 0, 0, 0.6),
+            0 0 40px rgba(124, 58, 237, 0.08) !important;
+        animation: cardFadeIn 0.4s ease-out !important;
+        text-align: center !important;
     }
 
     @keyframes cardFadeIn {
-        from { opacity: 0; transform: translateY(18px); }
+        from { opacity: 0; transform: translateY(14px); }
         to { opacity: 1; transform: translateY(0); }
     }
 
-    /* Logo Aura Pulse */
-    .logo-container {
-        position: relative;
-        width: 110px;
-        height: 110px;
-        margin: 0 auto 10px;
+    /* Logo Styling */
+    .auth-logo-container {
+        width: 88px;
+        height: 88px;
+        margin: 0 auto 16px;
         display: flex;
         align-items: center;
         justify-content: center;
+        position: relative;
     }
-    .logo-container::before {
+    .auth-logo-container::before {
         content: '';
         position: absolute;
-        inset: -10px;
+        inset: -6px;
         border-radius: 50%;
-        background: radial-gradient(circle, rgba(167, 139, 250, 0.45) 0%, rgba(124, 58, 237, 0.15) 60%, transparent 85%);
-        animation: aura-pulse 3.5s ease-in-out infinite alternate;
-        z-index: 0;
+        background: radial-gradient(circle, rgba(167, 139, 250, 0.3) 0%, transparent 70%);
+        pointer-events: none;
     }
-    @keyframes aura-pulse {
-        0% { transform: scale(0.95); opacity: 0.6; }
-        100% { transform: scale(1.12); opacity: 1; }
-    }
-    .logo-img {
-        position: relative;
-        width: 100px;
-        height: 100px;
+    .auth-logo-img {
+        width: 80px;
+        height: 80px;
         border-radius: 50%;
         object-fit: cover;
-        z-index: 1;
-        mix-blend-mode: lighten;
-        filter: drop-shadow(0 0 25px rgba(167, 139, 250, 0.75));
+        box-shadow: 0 0 24px rgba(167, 139, 250, 0.4);
+        border: 1.5px solid rgba(167, 139, 250, 0.3);
     }
 
-    /* Field Labels */
-    .login-field-label {
-        color: #e4e4e7 !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-        margin: 22px 0 8px !important;
-    }
-
-    /* Force all inner Streamlit input wrappers to be transparent */
-    div[data-testid="stTextInput"],
-    div[data-testid="stTextInput"] > div,
-    div[data-testid="stTextInput"] > div > div,
-    div[data-baseweb="input"] {
-        background: transparent !important;
-        border: none !important;
-        box-shadow: none !important;
-    }
-
-    /* Hide Streamlit 'Press Enter to apply' instructions and '0/6' max_chars counters */
-    div[data-testid="InputInstructions"],
-    div[data-testid="stInputInstruction"],
-    div[data-testid="stWidgetInstructions"],
-    div[data-testid="stTextInput"] small,
-    div[data-testid="stTextInput"] [data-testid="stMarkdownContainer"] small,
-    div[data-testid="stTextInput"] div[style*="font-size"],
-    .stTextInput p,
-    .stTextInput small {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        height: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }
-
-    /* Premium Modern Rounded Glass Input Fields (ChatGPT / Claude style) */
-    div[data-testid="stTextInput"] input {
-        background: rgba(255, 255, 255, 0.08) !important;
-        border: 1.5px solid rgba(255, 255, 255, 0.18) !important;
-        border-radius: 14px !important;
+    /* Typography */
+    .auth-brand-name {
         color: #ffffff !important;
-        height: 56px !important;
-        font-size: 15px !important;
-        padding-left: 20px !important;
-        padding-right: 20px !important;
-        box-shadow: none !important;
-        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        font-size: 22px !important;
+        font-weight: 700 !important;
+        letter-spacing: 2px !important;
+        margin: 0 0 6px 0 !important;
+        text-transform: uppercase !important;
     }
 
-    div[data-testid="stTextInput"] input::placeholder {
-        color: rgba(255, 255, 255, 0.45) !important;
-    }
-
-    div[data-testid="stTextInput"] input:hover {
-        border-color: rgba(255, 255, 255, 0.3) !important;
-        background: rgba(255, 255, 255, 0.1) !important;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25) !important;
-    }
-
-    div[data-testid="stTextInput"] input:focus {
-        border-color: #a78bfa !important;
-        background: rgba(255, 255, 255, 0.12) !important;
-        box-shadow: 0 0 0 3.5px rgba(167, 139, 250, 0.25), 0 0 25px rgba(167, 139, 250, 0.2) !important;
-        outline: none !important;
-    }
-
-    .input-wrapper {
-        position: relative !important;
-        margin-bottom: 20px !important;
-    }
-
-    /* Secondary Glass Pill Button (Send OTP) */
-    .send-otp-btn button {
-        background: rgba(255, 255, 255, 0.05) !important;
-        border: 1px solid rgba(167, 139, 250, 0.3) !important;
-        color: #ffffff !important;
-        border-radius: 24px !important;
-        font-weight: 600 !important;
-        font-size: 14px !important;
-        height: 46px !important;
-        margin-top: 6px !important;
-        margin-bottom: 6px !important;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2) !important;
-        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
-    }
-
-    .send-otp-btn button:hover:not(:disabled) {
-        background: rgba(167, 139, 250, 0.15) !important;
-        border-color: rgba(167, 139, 250, 0.5) !important;
-        transform: translateY(-1.5px) !important;
-        box-shadow: 0 8px 25px rgba(167, 139, 250, 0.25) !important;
-    }
-
-    /* Primary Violet Gradient CTA Button (Login) */
-    button[kind="primary"] {
-        background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%) !important;
-        color: #ffffff !important;
-        font-weight: 600 !important;
-        font-size: 15px !important;
-        border-radius: 25px !important;
-        height: 50px !important;
-        border: none !important;
-        margin-top: 10px !important;
-        box-shadow: 0 10px 30px rgba(139, 92, 246, 0.5) !important;
-        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
-    }
-
-    button[kind="primary"]:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 14px 38px rgba(139, 92, 246, 0.65) !important;
-    }
-
-    /* Modern Register Link Styling */
-    .register-link {
-        color: #a78bfa !important;
-        font-weight: 600 !important;
-        cursor: pointer !important;
-        text-decoration: none !important;
-        transition: all 0.25s ease !important;
-        padding-bottom: 2px !important;
-        border-bottom: 1.5px solid transparent !important;
-    }
-    .register-link:hover {
+    .auth-tagline {
         color: #c4b5fd !important;
-        border-bottom: 1.5px solid #c4b5fd !important;
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        letter-spacing: 2.2px !important;
+        margin: 0 0 28px 0 !important;
+        text-transform: uppercase !important;
     }
 
-    /* Primary Google Button Styling */
+    .auth-divider {
+        height: 1px !important;
+        background: linear-gradient(90deg, transparent, rgba(167, 139, 250, 0.2), transparent) !important;
+        margin: 0 0 28px 0 !important;
+    }
+
+    /* Primary Google Sign-In Button with Official Google "G" SVG */
     div.st-key-btn_google_login > button {
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
-        background: rgba(255, 255, 255, 0.08) !important;
-        border: 1px solid rgba(255, 255, 255, 0.22) !important;
-        border-radius: 25px !important;
+        background: #ffffff !important;
+        border: 1px solid #dadce0 !important;
+        border-radius: 14px !important;
         height: 50px !important;
         width: 100% !important;
-        color: #ffffff !important;
-        font-size: 14px !important;
+        color: #3c4043 !important;
+        font-size: 15px !important;
         font-weight: 600 !important;
         cursor: pointer !important;
-        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
-        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35) !important;
-        margin-bottom: 6px !important;
+        transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+        letter-spacing: 0.2px !important;
     }
 
     div.st-key-btn_google_login > button:hover {
-        background: rgba(255, 255, 255, 0.16) !important;
-        border-color: rgba(167, 139, 250, 0.6) !important;
-        transform: translateY(-2px) !important;
-        box-shadow: 0 8px 25px rgba(167, 139, 250, 0.3) !important;
-        color: #ffffff !important;
+        background: #f8f9fa !important;
+        border-color: #c6c9ce !important;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25) !important;
+        transform: translateY(-1px) !important;
+        color: #202124 !important;
+    }
+
+    div.st-key-btn_google_login > button::before {
+        content: '' !important;
+        display: inline-block !important;
+        width: 18px !important;
+        height: 18px !important;
+        margin-right: 12px !important;
+        background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path fill="%23EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="%234285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="%23FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="%2334A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>') no-repeat center center !important;
+        background-size: contain !important;
+    }
+
+    .auth-trust-badge {
+        margin-top: 24px !important;
+        font-size: 12px !important;
+        color: rgba(255, 255, 255, 0.45) !important;
+        line-height: 1.5 !important;
+        letter-spacing: 0.2px !important;
+    }
+
+    /* Responsive */
+    @media (max-width: 480px) {
+        div[data-testid="stColumn"]:nth-child(2) > div:first-child,
+        div[data-testid="column"]:nth-child(2) > div:first-child,
+        div.stColumn:nth-child(2) > div:first-child {
+            padding: 32px 22px 28px !important;
+            margin-top: 20px !important;
+        }
     }
     </style>
     """, unsafe_allow_html=True)
 
-    # Outer Logo Header (Floating on dark ambient background ABOVE the glass card)
+    # Logo element
     icon_html = (
-        f"<div class='logo-container'>"
-        f"<img src='{KRISHNA_ICON}' class='logo-img' alt='Krishna AI'/>"
+        f"<div class='auth-logo-container'>"
+        f"<img src='{KRISHNA_ICON}' class='auth-logo-img' alt='Krishna AI'/>"
         f"</div>"
-    ) if KRISHNA_ICON else "<div style='font-size:64px;text-align:center;margin-bottom:14px;'>🦚</div>"
+    ) if KRISHNA_ICON else "<div style='font-size:54px;text-align:center;margin-bottom:12px;'>🦚</div>"
 
-    st.markdown(f"""
-    <div style='text-align:center;padding:12px 0 24px;'>
-        {icon_html}
-        <h1 style='color:#ffffff;margin:4px 0 4px;font-size:28px;
-                   font-weight:700;letter-spacing:-0.5px;'>Krishna AI</h1>
-        <p style='color:#c4b5fd;font-size:11px;margin:0;
-                  letter-spacing:1.8px;font-weight:600;text-transform:uppercase;'>
-            WISDOM &nbsp;·&nbsp; CLARITY &nbsp;·&nbsp; PEACE
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # ── Glassmorphism Authentication Card ──
-    _, col, _ = st.columns([1, 2.2, 1])
+    # Minimal, Premium Authentication Card
+    _, col, _ = st.columns([1, 1.8, 1])
     with col:
-        # Card Header inside card matching reference mockup
-        st.markdown("""
-        <div style='text-align:center;margin-bottom:20px;'>
-            <h3 style='color:#ffffff;margin:0 0 4px;font-size:22px;font-weight:700;'>Welcome Back</h3>
-            <p style='color:rgba(255,255,255,0.6);margin:0;font-size:12px;'>Login to continue to Krishna AI</p>
-        </div>
+        st.markdown(f"""
+        {icon_html}
+        <h1 class='auth-brand-name'>KRISHNA AI</h1>
+        <p class='auth-tagline'>Clarity &nbsp;&bull;&nbsp; Reflection &nbsp;&bull;&nbsp; Wisdom</p>
+        <div class='auth-divider'></div>
         """, unsafe_allow_html=True)
 
         oauth_err = st.query_params.get("oauth_error")
         if oauth_err:
-            st.error(f"❌ Google OAuth Error: {oauth_err}")
+            st.error(f"❌ Google Sign-In Error: {escape_for_html(oauth_err)}")
 
-        # ── Primary: Continue with Google ──
-        if st.button("🌐  Continue with Google", key="btn_google_login", use_container_width=True):
+        if st.button("Continue with Google", key="btn_google_login", use_container_width=True):
             try:
                 st.login()
             except Exception as e:
@@ -1362,90 +1268,19 @@ if "user" not in st.session_state:
                 st.error("Google Sign-In is initializing. Please verify [auth] configuration in secrets.")
 
         st.markdown("""
-        <div style="display:flex;align-items:center;text-align:center;margin:18px 0 14px;">
-            <div style="flex-grow:1;height:1px;background:rgba(255,255,255,0.1);"></div>
-            <span style="padding:0 12px;color:rgba(255,255,255,0.45);font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">or continue with email code</span>
-            <div style="flex-grow:1;height:1px;background:rgba(255,255,255,0.1);"></div>
+        <div class='auth-trust-badge'>
+            Your conversations are private and securely stored.
         </div>
         """, unsafe_allow_html=True)
 
-        # ── Email Address Input ──
-        st.markdown("<div class='login-field-label'>Email Address</div>", unsafe_allow_html=True)
-        st.markdown("<div class='input-wrapper'>", unsafe_allow_html=True)
-        email = st.text_input("Email", placeholder="Enter your email",
-                              label_visibility="collapsed", key="login_email")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        # ── Send OTP Button ──
-        can_send, cooldown_left = otp_can_send(email.strip().lower()) if is_valid_email(email) else (True, 0)
-        send_label = "Send Verification OTP" if can_send else f"Resend Code in {cooldown_left}s"
-
-        st.markdown('<div class="send-otp-btn">', unsafe_allow_html=True)
-        if st.button(send_label, disabled=not can_send, use_container_width=True):
-            if not is_valid_email(email):
-                st.error("Please enter a valid email address.")
-            else:
-                with st.spinner("Generating & sending security code..."):
-                    otp = generate_otp(6)
-                    ok, err = send_otp_email(email.strip().lower(), otp)
-                if ok:
-                    otp_create(email.strip().lower(), otp)
-                    st.success(f"Verification code sent to **{email}**. Valid for 5 minutes.")
-                else:
-                    st.error(f"Failed to send email: {err}")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        # ── Verification Code Field ──
-        st.markdown("<div class='login-field-label'>Verification Code</div>", unsafe_allow_html=True)
-        st.markdown("<div class='input-wrapper'>", unsafe_allow_html=True)
-        otp_input = st.text_input("OTP Code", max_chars=6, placeholder="Enter 6-digit code",
-                                  label_visibility="collapsed", key="otp_input")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        # ── Resend Status Row (Directly below 6-digit code box) ──
-        st.markdown(
-            f"<div style='text-align:right;margin-top:-10px;margin-bottom:18px;font-size:12px;color:rgba(255,255,255,0.45);'>"
-            f"Didn't receive the code? <span style='color:#a78bfa;font-weight:600;cursor:pointer;'>Resend OTP</span>"
-            f"</div>",
-            unsafe_allow_html=True
-        )
-
-        # ── Primary Login Button ──
-        if st.button("Login to Krishna AI  →", use_container_width=True, type="primary"):
-            cleaned_email = email.strip().lower()
-            success, err_msg = otp_verify(cleaned_email, otp_input)
-            if success:
-                c_path = get_path(cleaned_email, "chats")
-                is_new_user = not os.path.exists(c_path)
-                if is_new_user:
-                    st.session_state.welcome_msg = "🎉 Welcome to Krishna AI! Your account has been created successfully."
-                else:
-                    st.session_state.welcome_msg = "Welcome back!"
-
-                st.session_state.user       = cleaned_email
-                st.session_state.chat_id    = None
-                st.session_state.login_time = time.time()
-                st.session_state.chats      = None   # lazy load flag
-                st.session_state.memory     = None   # lazy load flag
-                st.rerun()
-            else:
-                st.error(err_msg)
-
-        # ── Passwordless Onboarding Hint ──
-        st.markdown(
-            f"<div style='text-align:center;margin-top:22px;font-size:13px;color:#a1a1aa;font-weight:400;letter-spacing:-0.2px;line-height:1.5;'>"
-            f"First time here?<br><span style='color:rgba(255,255,255,0.7);font-weight:500;'>Just verify your email to get started.</span>"
-            f"</div>",
-            unsafe_allow_html=True
-        )
-
-    # Login page footer OUTSIDE glass card box at bottom of page
+    # Clean footer
     st.markdown("""
-    <div class="footer" style="text-align:center;margin-top:32px;margin-bottom:20px;font-size:12px;color:rgba(255,255,255,0.4);">Created by <span style="color:#a78bfa;font-weight:600;">Prayuktha Kanchi</span> 🦚</div>
+    <div class="footer" style="text-align:center;margin-top:40px;margin-bottom:20px;font-size:12px;color:rgba(255,255,255,0.35);">
+        Created by <span style="color:#a78bfa;font-weight:600;">Prayuktha Kanchi</span> 🦚
+    </div>
     """, unsafe_allow_html=True)
 
     st.stop()
-
 
 
 # ─────────────────────────────────────────────
@@ -1574,7 +1409,9 @@ with st.sidebar:
                 st.logout()
             except Exception as e:
                 logger.warning(f"st.logout() notice: {e}")
-        st.rerun()
+                st.rerun()
+        else:
+            st.rerun()
 
     # Brand footer
     st.markdown("""
@@ -1666,6 +1503,9 @@ def extract_and_save_memories(client, user_email: str, user_msg: str, assistant_
             for m in existing_memories[-10:]
         ])
 
+        # Bound user message length to 500 chars and sanitize quotes to prevent prompt injection
+        bounded_msg = user_msg[:500].strip().replace('"', "'")
+
         extraction_prompt = f"""You are the Memory Extraction Engine for Krishna AI.
 Extract durable, long-term personal facts about the user from their message.
 
@@ -1681,7 +1521,7 @@ Rules:
 Existing user memories:
 {existing_context if existing_context else "(None)"}
 
-User Message: "{user_msg}"
+User Message: "{bounded_msg}"
 
 Return ONLY a valid JSON array of memory objects with format:
 [
@@ -1796,16 +1636,23 @@ messages = chats.get(current_cid, []) if current_cid else []
 
 if not messages:
     icon_welcome = (
-        f"<img src='{KRISHNA_ICON}' width='96' "
-        "style='border-radius:50%;box-shadow:0 0 40px rgba(167,139,250,0.45);"
-        "border:1.5px solid rgba(167,139,250,0.3);' alt='Krishna'/>"
-    ) if KRISHNA_ICON else "<div style='font-size:56px;'>🦚</div>"
+        f"<img src='{KRISHNA_ICON}' width='76' "
+        "style='border-radius:50%;box-shadow:0 0 32px rgba(167,139,250,0.35);"
+        "border:1.5px solid rgba(167,139,250,0.25);margin-bottom:14px;' alt='Krishna'/>"
+    ) if KRISHNA_ICON else "<div style='font-size:48px;margin-bottom:10px;'>🦚</div>"
 
     st.markdown(f"""
     <div class='welcome-card'>
         {icon_welcome}
-        <h3>Namaste 🙏</h3>
-        <p>Ask Krishna anything — about life, peace, purpose, or wisdom from the Bhagavad Gita.</p>
+        <h3 style='color:#ffffff;font-size:21px;font-weight:600;margin:0 0 8px;'>What would you like clarity on today?</h3>
+        <p style='color:rgba(255,255,255,0.5);font-size:13px;max-width:380px;margin:0 auto 24px;line-height:1.6;'>
+            Ask about decisions, duty, peace of mind, or timeless perspectives from the Bhagavad Gita.
+        </p>
+        <div style='display:flex;flex-wrap:wrap;gap:10px;justify-content:center;max-width:540px;margin:0 auto;'>
+            <div style='background:rgba(255,255,255,0.04);border:1px solid rgba(167,139,250,0.18);border-radius:20px;padding:8px 16px;font-size:12px;color:rgba(255,255,255,0.7);'>Help me make a difficult decision</div>
+            <div style='background:rgba(255,255,255,0.04);border:1px solid rgba(167,139,250,0.18);border-radius:20px;padding:8px 16px;font-size:12px;color:rgba(255,255,255,0.7);'>Explain this concept clearly</div>
+            <div style='background:rgba(255,255,255,0.04);border:1px solid rgba(167,139,250,0.18);border-radius:20px;padding:8px 16px;font-size:12px;color:rgba(255,255,255,0.7);'>I feel stuck. Help me think through it.</div>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 else:

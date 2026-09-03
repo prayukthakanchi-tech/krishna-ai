@@ -23,6 +23,7 @@ import time
 import os
 import shutil
 import database
+import app
 from app import (
     is_valid_email,
     safe_filename,
@@ -46,16 +47,19 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
         self.test_data_dir = "data_test_env"
         os.makedirs(self.test_data_dir, exist_ok=True)
         self.orig_otp_file = database.OTP_STATE_FILE
+        self.orig_app_otp_file = app.OTP_STATE_FILE
         self.orig_json_path = database.get_json_chat_path
         self.orig_memory_path = database.get_json_memory_path
 
         # Monkey-patch database data directory for tests
         database.OTP_STATE_FILE = os.path.join(self.test_data_dir, "_otp_state.json")
+        app.OTP_STATE_FILE = os.path.join(self.test_data_dir, "_otp_state.json")
         database.get_json_chat_path = lambda email: os.path.join(self.test_data_dir, f"{safe_filename(email)}_chats.json")
         database.get_json_memory_path = lambda email: os.path.join(self.test_data_dir, f"{safe_filename(email)}_memory.json")
 
     def tearDown(self):
         database.OTP_STATE_FILE = self.orig_otp_file
+        app.OTP_STATE_FILE = self.orig_app_otp_file
         database.get_json_chat_path = self.orig_json_path
         database.get_json_memory_path = self.orig_memory_path
         if os.path.exists(self.test_data_dir):
@@ -764,6 +768,218 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
         beta_reloaded_chats = database.load_user_chats(user_beta)
         self.assertNotIn("Bhakti Yoga", beta_reloaded_chats)
         self.assertEqual(len(beta_reloaded_chats), 1)
+
+    def test_google_user_provisioning_idempotent(self):
+        """Verify automatic provisioning is idempotent and does not overwrite existing data."""
+        test_email = "prov_test_user@gmail.com"
+        ok1 = database.provision_user_if_new(test_email)
+        self.assertTrue(ok1)
+        # Seed chat data
+        database.save_user_chats(test_email, {"Chat 1": [{"role": "user", "content": "Hello"}]})
+        # Second provisioning attempt (subsequent login)
+        ok2 = database.provision_user_if_new(test_email)
+        self.assertTrue(ok2)
+        # Verify existing data was untouched
+        chats = database.load_user_chats(test_email)
+        self.assertIn("Chat 1", chats)
+
+    def test_google_user_email_casing_normalization(self):
+        """Verify email casing differences resolve to the exact same normalized identity."""
+        raw_email = "  John.Doe@GMAIL.COM  "
+        norm_email = "john.doe@gmail.com"
+        database.provision_user_if_new(raw_email)
+        database.save_user_chats(raw_email, {"Normalize Test": [{"role": "user", "content": "Test msg"}]})
+        # Load with normalized and differently-cased emails
+        loaded_norm = database.load_user_chats(norm_email)
+        loaded_raw = database.load_user_chats(raw_email)
+        self.assertIn("Normalize Test", loaded_norm)
+        self.assertIn("Normalize Test", loaded_raw)
+
+    def test_account_switching_no_state_leakage(self):
+        """Verify logging out and logging in as another user provides complete isolation."""
+        user_1 = "account_one@gmail.com"
+        user_2 = "account_two@gmail.com"
+
+        database.save_user_chats(user_1, {"User1 Chat": [{"role": "user", "content": "U1 private data"}]})
+        database.save_user_memory(user_1, "U1 memory", category="profile", importance=8)
+
+        database.save_user_chats(user_2, {"User2 Chat": [{"role": "user", "content": "U2 private data"}]})
+        database.save_user_memory(user_2, "U2 memory", category="profile", importance=8)
+
+        # Verify User 2 sees none of User 1's data
+        u2_chats = database.load_user_chats(user_2)
+        u2_mems = database.load_user_memories(user_2)
+        self.assertIn("User2 Chat", u2_chats)
+        self.assertNotIn("User1 Chat", u2_chats)
+        self.assertTrue(any("U2" in m["memory_text"] for m in u2_mems))
+        self.assertFalse(any("U1" in m["memory_text"] for m in u2_mems))
+
+    def test_login_ui_elements_google_only(self):
+        """
+        Verify the visible login UI contains only Continue with Google,
+        and all email/OTP/password/signup forms are absent.
+        """
+        with open("app.py", "r", encoding="utf-8") as f:
+            code = f.read()
+
+        # Google button must be present
+        self.assertIn("Continue with Google", code)
+        self.assertIn("btn_google_login", code)
+
+        # Extract login screen block (between 'if "user" not in st.session_state:' and 'st.stop()')
+        login_start = code.find('if "user" not in st.session_state:')
+        login_end = code.find('st.stop()', login_start)
+        login_block = code[login_start:login_end]
+
+        # Forms that must NOT exist in the visible login UI
+        self.assertNotIn('st.text_input("Password"', login_block)
+        self.assertNotIn('st.text_input("Confirm Password"', login_block)
+        self.assertNotIn('st.text_input("OTP Code"', login_block)
+        self.assertNotIn('Send Verification OTP', login_block)
+        self.assertNotIn('Login to continue to Krishna AI', login_block)
+        self.assertNotIn('or continue with email code', login_block)
+        self.assertNotIn('register-link', login_block)
+
+        # Memory drawer must NOT exist in sidebar
+        self.assertNotIn("What Krishna Remembers", code)
+
+        # Empty chat greeting must be intentional
+        self.assertIn("What would you like clarity on today?", code)
+
+
+class TestKrishnaAIConcurrencyAndScale(unittest.TestCase):
+    """
+    Simulates high concurrency (50-60 simultaneous logical users) across all core flows:
+    1. 50 concurrent users generating and verifying OTPs (lock safety & zero state collisions).
+    2. 50 concurrent users creating and persisting independent chats (thread & file safety).
+    3. 50 concurrent users creating and querying long-term memories (strict isolation).
+    4. 10 concurrent requests racing to verify the exact same OTP (single-use enforcement).
+    """
+
+    def setUp(self):
+        self.test_data_dir = "data_conc_test_env"
+        os.makedirs(self.test_data_dir, exist_ok=True)
+        self.orig_otp_file = database.OTP_STATE_FILE
+        self.orig_app_otp_file = app.OTP_STATE_FILE
+        self.orig_json_path = database.get_json_chat_path
+        self.orig_memory_path = database.get_json_memory_path
+        self.orig_is_supabase_enabled = database.is_supabase_enabled
+
+        database.OTP_STATE_FILE = os.path.join(self.test_data_dir, "_otp_state.json")
+        app.OTP_STATE_FILE = os.path.join(self.test_data_dir, "_otp_state.json")
+        database.get_json_chat_path = lambda email: os.path.join(self.test_data_dir, f"{safe_filename(email)}_chats.json")
+        database.get_json_memory_path = lambda email: os.path.join(self.test_data_dir, f"{safe_filename(email)}_memory.json")
+        # Isolate application concurrency testing from external Supabase free-tier network rate-limits
+        database.is_supabase_enabled = lambda: False
+
+    def tearDown(self):
+        database.OTP_STATE_FILE = self.orig_otp_file
+        app.OTP_STATE_FILE = self.orig_app_otp_file
+        database.get_json_chat_path = self.orig_json_path
+        database.get_json_memory_path = self.orig_memory_path
+        database.is_supabase_enabled = self.orig_is_supabase_enabled
+        if os.path.exists(self.test_data_dir):
+            shutil.rmtree(self.test_data_dir, ignore_errors=True)
+
+    def test_50_concurrent_users_otp_generation_and_verification(self):
+        import concurrent.futures
+        num_users = 50
+        users = [f"conc_otp_user_{i}@example.com" for i in range(num_users)]
+        otps = {u: f"{100000 + i}" for i, u in enumerate(users)}
+
+        def run_user_otp(u):
+            code = otps[u]
+            otp_create(u, code)
+            ok, err = otp_verify(u, code)
+            return u, ok, err
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=num_users) as executor:
+            futures = [executor.submit(run_user_otp, u) for u in users]
+            results = [f.result() for f in concurrent.futures.as_completed(futures)]
+
+        for u, ok, err in results:
+            self.assertTrue(ok, f"User {u} OTP verification failed: {err}")
+            self.assertEqual(err, "")
+
+    def test_50_concurrent_users_chat_persistence_and_isolation(self):
+        import concurrent.futures
+        num_users = 50
+        users = [f"conc_chat_user_{i}@example.com" for i in range(num_users)]
+
+        def save_and_reload(i, u):
+            chat_data = {
+                f"Conversation_{i}": [
+                    {"role": "user", "content": f"Message from user {i}"},
+                    {"role": "assistant", "content": f"Response to user {i}"}
+                ]
+            }
+            database.save_user_chats(u, chat_data)
+            loaded = database.load_user_chats(u)
+            return i, u, loaded
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=num_users) as executor:
+            futures = [executor.submit(save_and_reload, i, u) for i, u in enumerate(users)]
+            results = [f.result() for f in concurrent.futures.as_completed(futures)]
+
+        for i, u, loaded in results:
+            self.assertIn(f"Conversation_{i}", loaded)
+            self.assertEqual(len(loaded[f"Conversation_{i}"]), 2)
+            self.assertEqual(loaded[f"Conversation_{i}"][0]["content"], f"Message from user {i}")
+            # Ensure no other user's chat exists in this user's data
+            for other_i in range(min(5, num_users)):
+                if other_i != i:
+                    self.assertNotIn(f"Conversation_{other_i}", loaded)
+
+    def test_50_concurrent_users_memory_operations_and_isolation(self):
+        import concurrent.futures
+        num_users = 50
+        users = [f"conc_mem_user_{i}@example.com" for i in range(num_users)]
+
+        def run_user_memory(i, u):
+            ok, rec = database.save_user_memory(
+                email=u,
+                memory_text=f"User {i} is studying topic_{i} with specific focus",
+                category="career",
+                importance=7
+            )
+            mems = database.load_user_memories(u)
+            search = database.search_relevant_memories(u, f"topic_{i}")
+            return i, u, ok, mems, search
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=num_users) as executor:
+            futures = [executor.submit(run_user_memory, i, u) for i, u in enumerate(users)]
+            results = [f.result() for f in concurrent.futures.as_completed(futures)]
+
+        for i, u, ok, mems, search in results:
+            self.assertTrue(ok)
+            self.assertEqual(len(mems), 1)
+            self.assertEqual(mems[0]["user_email"], u)
+            self.assertIn(f"topic_{i}", mems[0]["memory_text"])
+            self.assertTrue(len(search) > 0)
+            self.assertIn(f"topic_{i}", search[0]["memory_text"])
+
+    def test_concurrent_otp_verification_race_single_use(self):
+        """
+        Simulate 10 concurrent requests attempting to verify the exact same OTP simultaneously.
+        Exactly ONE must succeed, and all 9 others must fail (no double-spend).
+        """
+        import concurrent.futures
+        race_email = "race_condition_user@example.com"
+        race_otp = "847291"
+        otp_create(race_email, race_otp)
+
+        def verify_attempt():
+            return otp_verify(race_email, race_otp)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [executor.submit(verify_attempt) for _ in range(10)]
+            results = [f.result() for f in concurrent.futures.as_completed(futures)]
+
+        success_count = sum(1 for ok, _ in results if ok)
+        fail_count = sum(1 for ok, _ in results if not ok)
+
+        self.assertEqual(success_count, 1, "Exactly one concurrent verification must succeed.")
+        self.assertEqual(fail_count, 9, "All 9 subsequent/concurrent verifications must fail.")
 
 
 if __name__ == "__main__":
