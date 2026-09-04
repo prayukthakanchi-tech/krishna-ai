@@ -48,6 +48,7 @@ import time
 from datetime import datetime, timezone, timedelta
 
 import streamlit as st
+import streamlit.components.v1 as components
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from groq import Groq
@@ -609,6 +610,129 @@ def set_page_title(chat_id: str = "Krishna AI") -> None:
     )
 
 
+# ─────────────────────────────────────────────
+# SMART CONTEXTUAL TITLING
+# ─────────────────────────────────────────────
+GREETING_WORDS = {
+    "hi", "hello", "hey", "namaste", "namaskar", "namaskaram", "pranam", "pranaam",
+    "radhe", "radhe radhe", "radhe shyam", "hare krishna", "jai shri krishna",
+    "jai shree krishna", "good morning", "good evening", "good afternoon", "good day",
+    "greetings", "krishna", "hey krishna", "hi krishna", "hello krishna",
+    "test", "testing", "yo", "sup", "howdy", "how are you", "how are you doing",
+    "who are you", "what is your name"
+}
+
+
+def is_greeting_or_small_talk(text: str) -> bool:
+    """Detect if a user message is simply a greeting or small talk."""
+    if not text:
+        return True
+    cleaned = re.sub(r"[^\w\s]", "", text.strip().lower())
+    if not cleaned:
+        return True
+    if cleaned in GREETING_WORDS:
+        return True
+    words = cleaned.split()
+    if len(words) <= 2 and all(w in GREETING_WORDS for w in words):
+        return True
+    pleasantries = {"hi", "hello", "hey", "namaste", "namaskar", "there", "how", "are", "you", "doing", "krishna", "companion", "friend"}
+    if len(words) <= 4 and all(w in pleasantries for w in words):
+        return True
+    return False
+
+
+def is_placeholder_or_greeting_title(title: str) -> bool:
+    """Check if a conversation title is a temporary placeholder or a greeting."""
+    if not title:
+        return True
+    clean_title = re.sub(r"\s*\(\d+\)$", "", title).strip()
+    return clean_title in ("New Conversation", "New Chat") or is_greeting_or_small_talk(clean_title)
+
+
+def generate_fallback_title(text: str) -> str:
+    """Generate a clean, readable 3-5 word deterministic title from user text."""
+    starter_map = {
+        "help me make a difficult decision": "Making a Difficult Decision",
+        "explain this concept clearly": "Concept Clarity & Understanding",
+        "i feel stuck help me think through it": "Navigating Feeling Stuck",
+    }
+    clean_lower = re.sub(r"[^\w\s]", "", text.strip().lower())
+    for phrase, title in starter_map.items():
+        if phrase in clean_lower or clean_lower in phrase:
+            return title
+
+    cleaned = text.strip()
+    filler_patterns = [
+        r"^(can you\s+)?(please\s+)?(explain|tell me about|help me with|help me|teach me about)\s+",
+        r"^(what does the gita say about|what does gita say about|what is the gita perspective on)\s+",
+        r"^(what is|what are|why do|why does|how do i|how to|how can i|how should i)\s+",
+        r"^(i am feeling|i feel|i am having trouble with|i struggle with)\s+",
+    ]
+    for pattern in filler_patterns:
+        cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE).strip()
+
+    words = [w.strip() for w in cleaned.split() if w.strip()]
+    if not words:
+        return "Thoughtful Reflection"
+
+    selected = words[:5]
+    raw_title = " ".join(selected)
+    if len(raw_title) > 36:
+        raw_title = " ".join(words[:4])
+        if len(raw_title) > 36:
+            raw_title = " ".join(words[:3])
+
+    clean_title = re.sub(r'[^\w\s\-&]', '', raw_title).strip().title()
+    return clean_title or "Thoughtful Reflection"
+
+
+def generate_smart_title(client, message: str) -> str:
+    """
+    Generate a meaningful 3-5 word contextual title.
+    Attempts lightweight Groq generation with llama-3.1-8b-instant,
+    falling back deterministically if LLM fails or is unavailable.
+    """
+    if is_greeting_or_small_talk(message):
+        return "New Conversation"
+
+    if client:
+        try:
+            prompt = (
+                "You are an expert conversation titler. Given this user message, "
+                "produce a concise, natural 3 to 5 word topic title suitable for a sidebar.\n"
+                "Rules:\n"
+                "- Output ONLY the title words, nothing else.\n"
+                "- Exactly 3 to 5 words.\n"
+                "- No quotes, no markdown, no leading 'Title:'.\n"
+                f"User Message: {message[:250]}"
+            )
+            resp = client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=20,
+                temperature=0.3
+            )
+            if resp.choices and resp.choices[0].message and resp.choices[0].message.content:
+                candidate = resp.choices[0].message.content.strip().strip('"\'*`')
+                cand_words = candidate.split()
+                if 2 <= len(cand_words) <= 7 and len(candidate) <= 45:
+                    return candidate.title()
+        except Exception as e:
+            logger.info(f"LLM smart titling fallback used: {e}")
+
+    return generate_fallback_title(message)
+
+
+def ensure_unique_title(title: str, existing_chats: dict, current_key: str | None = None) -> str:
+    """Ensure conversation title does not collide with existing conversations."""
+    if title not in existing_chats or title == current_key:
+        return title
+    counter = 1
+    while f"{title} ({counter})" in existing_chats and f"{title} ({counter})" != current_key:
+        counter += 1
+    return f"{title} ({counter})"
+
+
 # set_page_config must be called once at the top level
 st.set_page_config(
     page_title="Krishna AI",
@@ -819,11 +943,19 @@ button[data-testid="baseButton-primary"]:hover,
 
 /* Copy button (UI-11: includes execCommand fallback) */
 .copy-btn {
-    display: inline-block; margin-top: 6px; font-size: 11px;
-    color: #666; cursor: pointer; padding: 2px 8px;
-    border-radius: 6px; transition: all 0.2s; user-select: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-top: 4px; font-size: 11px; font-family: inherit;
+    color: rgba(255,255,255,0.55); cursor: pointer; padding: 3px 10px;
+    border-radius: 6px; transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+    user-select: none; outline: none; line-height: 1.4;
 }
-.copy-btn:hover { background: rgba(255,255,255,0.06); color: #a78bfa; }
+.copy-btn:hover {
+    background: rgba(167,139,250,0.12); color: #c4b5fd; border-color: rgba(167,139,250,0.35);
+}
+.copy-btn:active {
+    transform: scale(0.96);
+}
 
 /* Timestamps — fixed contrast (UI-10) */
 .msg-ts {
@@ -840,9 +972,42 @@ button[data-testid="baseButton-primary"]:hover,
 }
 
 /* Welcome card (UI-13: fixed contrast) */
-.welcome-card { text-align: center; padding: 70px 30px; }
-.welcome-card h3 { color: #a78bfa; font-size: 22px; font-weight: 600; margin: 16px 0 8px; }
-.welcome-card p { color: #aaa; font-size: 14px; max-width: 320px; margin: 0 auto; line-height: 1.6; }
+.welcome-card { text-align: center; padding: 48px 20px 16px; }
+.welcome-card h3 { color: #ffffff; font-size: 21px; font-weight: 600; margin: 14px 0 8px; }
+.welcome-card p { color: rgba(255,255,255,0.55); font-size: 13px; max-width: 420px; margin: 0 auto 16px; line-height: 1.6; }
+
+/* Clickable suggestion starter buttons */
+div[data-testid="stColumn"] div.st-key-starter_0 button,
+div[data-testid="stColumn"] div.st-key-starter_1 button,
+div[data-testid="stColumn"] div.st-key-starter_2 button {
+    background: rgba(255, 255, 255, 0.04) !important;
+    border: 1px solid rgba(167, 139, 250, 0.22) !important;
+    border-radius: 18px !important;
+    color: rgba(255, 255, 255, 0.82) !important;
+    font-size: 13px !important;
+    padding: 10px 14px !important;
+    font-weight: 500 !important;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    height: auto !important;
+    min-height: 48px !important;
+    white-space: normal !important;
+    line-height: 1.4 !important;
+    cursor: pointer !important;
+}
+div[data-testid="stColumn"] div.st-key-starter_0 button:hover,
+div[data-testid="stColumn"] div.st-key-starter_1 button:hover,
+div[data-testid="stColumn"] div.st-key-starter_2 button:hover {
+    background: rgba(167, 139, 250, 0.14) !important;
+    border-color: rgba(167, 139, 250, 0.5) !important;
+    color: #ffffff !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 20px rgba(167, 139, 250, 0.18) !important;
+}
+div[data-testid="stColumn"] div.st-key-starter_0 button:active,
+div[data-testid="stColumn"] div.st-key-starter_1 button:active,
+div[data-testid="stColumn"] div.st-key-starter_2 button:active {
+    transform: scale(0.97) !important;
+}
 
 /* Footer */
 .footer {
@@ -904,46 +1069,106 @@ button[data-testid="baseButton-primary"]:hover,
 # SESSION TIMEOUT — checked before any render  (BUG-07)
 # ─────────────────────────────────────────────
 if "login_time" in st.session_state:
-    if time.time() - st.session_state.login_time > SESSION_TIMEOUT:
+    if time.time() - st.session_state.get("login_time", time.time()) > SESSION_TIMEOUT:
         st.session_state.clear()
+        if hasattr(st, "logout"):
+            try:
+                st.logout()
+            except Exception:
+                pass
         st.warning("Session expired. Please log in again.")
-        st.rerun()
+        st.stop()
 
 
 # ─────────────────────────────────────────────
-# COPY BUTTON HELPER  (BUG-01/SEC-01 fixed)
+# COPY BUTTON HELPER  (BUG-01/SEC-01/UI-11 fixed)
 # ─────────────────────────────────────────────
-COPY_SCRIPT = """
+COPY_INJECTOR = """
 <script>
 (function() {
-  function copyText(el) {
-    var text = el.getAttribute('data-text');
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text)
-        .then(function() { el.textContent = 'Copied!'; setTimeout(function(){el.textContent='Copy';},2000); })
-        .catch(function() { fallback(el, text); });
-    } else { fallback(el, text); }
+  try {
+    const parentDoc = (window.parent && window.parent.document) || document;
+    if (parentDoc.__krishnaCopyAttached) return;
+    parentDoc.__krishnaCopyAttached = true;
+
+    parentDoc.addEventListener('click', function(e) {
+      const btn = e.target.closest('.copy-btn');
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      const b64 = btn.getAttribute('data-b64') || '';
+      if (!b64) return;
+
+      let text = '';
+      try {
+        text = new TextDecoder('utf-8').decode(Uint8Array.from(atob(b64), function(c){ return c.charCodeAt(0); }));
+      } catch(err) {
+        try { text = decodeURIComponent(escape(atob(b64))); } catch(e2) { text = atob(b64); }
+      }
+
+      function setSuccess() {
+        const originalText = btn.textContent;
+        btn.textContent = '✓ Copied';
+        btn.style.color = '#34d399';
+        setTimeout(function() {
+          btn.textContent = originalText;
+          btn.style.color = '';
+        }, 2000);
+      }
+
+      const nav = (window.parent && window.parent.navigator) || navigator;
+      if (nav.clipboard && nav.clipboard.writeText) {
+        nav.clipboard.writeText(text)
+          .then(setSuccess)
+          .catch(function() { fallback(text); });
+      } else {
+        fallback(text);
+      }
+
+      function fallback(val) {
+        try {
+          const ta = parentDoc.createElement('textarea');
+          ta.value = val;
+          ta.setAttribute('readonly', '');
+          ta.style.position = 'fixed';
+          ta.style.top = '0';
+          ta.style.left = '0';
+          ta.style.opacity = '0';
+          ta.style.pointerEvents = 'none';
+          parentDoc.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          const ok = parentDoc.execCommand('copy');
+          parentDoc.body.removeChild(ta);
+          if (ok) {
+            setSuccess();
+          } else {
+            btn.textContent = 'Error';
+            setTimeout(function(){ btn.textContent = 'Copy'; }, 2000);
+          }
+        } catch(e) {
+          btn.textContent = 'Error';
+          setTimeout(function(){ btn.textContent = 'Copy'; }, 2000);
+        }
+      }
+    });
+  } catch(err) {
+    console.warn('Krishna copy injector notice:', err);
   }
-  function fallback(el, text) {
-    var ta = document.createElement('textarea');
-    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
-    document.body.appendChild(ta); ta.focus(); ta.select();
-    try { document.execCommand('copy'); el.textContent = 'Copied!'; }
-    catch(e) { el.textContent = 'Error'; }
-    document.body.removeChild(ta);
-    setTimeout(function(){el.textContent='Copy';},2000);
-  }
-  document.addEventListener('click', function(e) {
-    if (e.target.classList.contains('copy-btn')) copyText(e.target);
-  });
 })();
 </script>
 """
 
+
 def copy_button_html(content: str) -> str:
-    """Safe copy button — content stored in data attribute, not template literal. (BUG-01)"""
-    safe = escape_for_data_attr(content)
-    return f'<span class="copy-btn" data-text="{safe}">Copy</span>'
+    """
+    Safe, reliable copy button — content encoded in base64 to preserve exact formatting,
+    newlines, markdown syntax, quotes, and unicode/emojis with zero HTML attribute escaping issues.
+    Executed via parent document listener, completely bypassing DOMPurify script stripping.
+    """
+    b64 = base64.b64encode(content.encode("utf-8")).decode("ascii")
+    return f'<button type="button" class="copy-btn" data-b64="{b64}" title="Copy response">Copy</button>'
 
 
 def message_footer_html(ts: str, content: str, is_assistant: bool) -> str:
@@ -1298,12 +1523,12 @@ if "user" in st.session_state and user_email:
     if st.session_state.get("chats") is None:
         st.session_state.chats = database.load_user_chats(user_email)
 
-    chats = st.session_state.chats
+    chats = st.session_state.get("chats") or {}
 else:
     chats = {}
 
 # Initialize default chat_id
-if not st.session_state.get("chat_id"):
+if "chat_id" not in st.session_state:
     st.session_state.chat_id = None
 
 
@@ -1344,7 +1569,7 @@ with st.sidebar:
             unsafe_allow_html=True
         )
         for cid in list(real_chats.keys()):
-            is_active = st.session_state.chat_id == cid
+            is_active = st.session_state.get("chat_id") == cid
             confirm_key = f"confirm_del_{cid}"
 
             c1, c2 = st.columns([4.8, 1.2])
@@ -1363,7 +1588,7 @@ with st.sidebar:
                     st.markdown('<div class="danger-btn">', unsafe_allow_html=True)
                     if st.button("✓", key=f"do_del_{cid}", help="Confirm delete"):
                         del chats[cid]
-                        if st.session_state.chat_id == cid:
+                        if st.session_state.get("chat_id") == cid:
                             st.session_state.chat_id = None
                         st.session_state.chats = chats
                         database.delete_user_chat(user_email, cid)
@@ -1409,9 +1634,7 @@ with st.sidebar:
                 st.logout()
             except Exception as e:
                 logger.warning(f"st.logout() notice: {e}")
-                st.rerun()
-        else:
-            st.rerun()
+        st.stop()
 
     # Brand footer
     st.markdown("""
@@ -1431,7 +1654,7 @@ icon_tag = (
     "border:1px solid rgba(167,139,250,0.3);' alt='Krishna'/>"
 ) if KRISHNA_ICON else "🦚 "
 
-current_cid = st.session_state.chat_id
+current_cid = st.session_state.get("chat_id")
 chat_display = (current_cid[:45] + "…") if current_cid and len(current_cid) > 45 else (current_cid or "New Conversation")
 
 st.markdown(f"""
@@ -1632,9 +1855,15 @@ def build_prompt(relevant_memories: list | None = None) -> str:
 # ─────────────────────────────────────────────
 # CHAT DISPLAY
 # ─────────────────────────────────────────────
+components.html(COPY_INJECTOR, height=0, width=0)
 messages = chats.get(current_cid, []) if current_cid else []
 
-if not messages:
+# Check if a suggestion starter was clicked
+pending_starter = st.session_state.pop("pending_starter", None)
+input_msg = st.chat_input("Ask Krishna...")
+user_msg = input_msg or pending_starter
+
+if not messages and not user_msg:
     icon_welcome = (
         f"<img src='{KRISHNA_ICON}' width='76' "
         "style='border-radius:50%;box-shadow:0 0 32px rgba(167,139,250,0.35);"
@@ -1648,17 +1877,23 @@ if not messages:
         <p style='color:rgba(255,255,255,0.5);font-size:13px;max-width:380px;margin:0 auto 24px;line-height:1.6;'>
             Ask about decisions, duty, peace of mind, or timeless perspectives from the Bhagavad Gita.
         </p>
-        <div style='display:flex;flex-wrap:wrap;gap:10px;justify-content:center;max-width:540px;margin:0 auto;'>
-            <div style='background:rgba(255,255,255,0.04);border:1px solid rgba(167,139,250,0.18);border-radius:20px;padding:8px 16px;font-size:12px;color:rgba(255,255,255,0.7);'>Help me make a difficult decision</div>
-            <div style='background:rgba(255,255,255,0.04);border:1px solid rgba(167,139,250,0.18);border-radius:20px;padding:8px 16px;font-size:12px;color:rgba(255,255,255,0.7);'>Explain this concept clearly</div>
-            <div style='background:rgba(255,255,255,0.04);border:1px solid rgba(167,139,250,0.18);border-radius:20px;padding:8px 16px;font-size:12px;color:rgba(255,255,255,0.7);'>I feel stuck. Help me think through it.</div>
-        </div>
     </div>
     """, unsafe_allow_html=True)
-else:
-    # Inject copy script once (BUG-01/UI-11)
-    st.markdown(COPY_SCRIPT, unsafe_allow_html=True)
 
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("Help me make a difficult decision", key="starter_0", use_container_width=True):
+            st.session_state.pending_starter = "Help me make a difficult decision"
+            st.rerun()
+    with col2:
+        if st.button("Explain this concept clearly", key="starter_1", use_container_width=True):
+            st.session_state.pending_starter = "Explain this concept clearly"
+            st.rerun()
+    with col3:
+        if st.button("I feel stuck. Help me think through it.", key="starter_2", use_container_width=True):
+            st.session_state.pending_starter = "I feel stuck. Help me think through it."
+            st.rerun()
+elif messages:
     for m in messages:
         role = m.get("role", "user")
         content = m.get("content", "")
@@ -1684,10 +1919,8 @@ else:
 
 
 # ─────────────────────────────────────────────
-# CHAT INPUT
+# CHAT PROCESSING
 # ─────────────────────────────────────────────
-user_msg = st.chat_input("Ask Krishna...")
-
 if user_msg:
     # BUG-13: Length cap
     if len(user_msg) > MAX_INPUT_CHARS:
@@ -1703,18 +1936,28 @@ if user_msg:
     # IST timestamp (BUG-16)
     now_str = datetime.now(IST).strftime("%I:%M %p")
 
-    # BUG-05: collision-safe auto-title
+    # Client for inference and optional smart titling
+    client = get_groq_client()
+
+    # Smart contextual titling
     if not current_cid:
-        base_title = clean_msg[:30].strip() or "New Conversation"
-        title = base_title
-        counter = 1
-        while title in chats:
-            title = f"{base_title} ({counter})"
-            counter += 1
-        current_cid = title
+        if is_greeting_or_small_talk(clean_msg):
+            current_cid = ensure_unique_title("New Conversation", chats)
+        else:
+            smart_title = generate_smart_title(client, clean_msg)
+            current_cid = ensure_unique_title(smart_title, chats)
         st.session_state.chat_id = current_cid
         chats[current_cid] = []
         st.session_state.chats = chats
+    elif is_placeholder_or_greeting_title(current_cid) and not is_greeting_or_small_talk(clean_msg):
+        smart_title = generate_smart_title(client, clean_msg)
+        new_cid = ensure_unique_title(smart_title, chats, current_key=current_cid)
+        if new_cid != current_cid:
+            chats[new_cid] = chats.pop(current_cid, [])
+            database.delete_user_chat(user_email, current_cid)
+            current_cid = new_cid
+            st.session_state.chat_id = current_cid
+            st.session_state.chats = chats
 
     # BUG-06: get a copy, don't mutate cache
     messages = list(chats.get(current_cid, []))
@@ -1743,7 +1986,8 @@ if user_msg:
     reply = ""
 
     try:
-        client = get_groq_client()
+        if not client:
+            client = get_groq_client()
         if not client:
             raise ValueError("GROQ_API_KEY is not configured in Secrets.")
 
@@ -1802,7 +2046,6 @@ if user_msg:
             placeholder.markdown(reply)
 
             now_str2 = datetime.now(IST).strftime("%I:%M %p")
-            st.markdown(COPY_SCRIPT, unsafe_allow_html=True)
             st.markdown(
                 message_footer_html(now_str2, reply, True),
                 unsafe_allow_html=True

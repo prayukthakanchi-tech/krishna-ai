@@ -130,11 +130,18 @@ def provision_user_if_new(email: str) -> bool:
     Preserves existing users, conversations, and memories without duplication.
     """
     cleaned_email = email.strip().lower()
+    if not cleaned_email:
+        return False
     if is_supabase_enabled():
-        ok, res = _supabase_request("POST", "users", data={"email": cleaned_email}, params={"on_conflict": "email"})
-        if not ok and ("409" in str(res) or "23505" in str(res) or "already exists" in str(res)):
-            return True
-        return ok
+        try:
+            ok, res = _supabase_request("POST", "users", data={"email": cleaned_email}, params={"on_conflict": "email"})
+            if not ok and ("409" in str(res) or "23505" in str(res) or "already exists" in str(res)):
+                return True
+            if ok:
+                return True
+            logger.warning(f"Supabase provisioning notice for {cleaned_email}: {res}")
+        except Exception as e:
+            logger.warning(f"Supabase user provisioning exception: {e}")
     return True
 
 

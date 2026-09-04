@@ -846,6 +846,137 @@ class TestKrishnaAISecurityAndAuth(unittest.TestCase):
         # Empty chat greeting must be intentional
         self.assertIn("What would you like clarity on today?", code)
 
+    def test_copy_button_html_fidelity_and_security(self):
+        """
+        Verify copy_button_html encodes responses with complete fidelity
+        across multiline markdown, quotes, emojis, and unicode.
+        """
+        import base64
+        import re
+        from app import copy_button_html
+
+        test_responses = [
+            "Simple single-line response.",
+            "Multiline response:\nLine 1\nLine 2\nLine 3",
+            'Response with "double quotes" and \'single quotes\'.',
+            "```python\ndef solve():\n    return 'done'\n```",
+            "Sanskrit wisdom: कर्मण्येवाधिकारस्ते मा फलेषु कदाचन।",
+            "Emoji response: Peace & blessings 🦚 🙏 ✨",
+            "Complex table:\n| Col 1 | Col 2 |\n|---|---|\n| A | B |",
+        ]
+
+        for resp in test_responses:
+            html_btn = copy_button_html(resp)
+            self.assertIn('class="copy-btn"', html_btn)
+            self.assertIn('<button', html_btn)
+            self.assertIn('data-b64=', html_btn)
+
+            # Extract data-b64 attribute and verify exact roundtrip
+            m = re.search(r'data-b64="([A-Za-z0-9+/=]+)"', html_btn)
+            self.assertIsNotNone(m, "data-b64 attribute must be valid base64")
+            b64_val = m.group(1)
+            decoded = base64.b64decode(b64_val.encode("ascii")).decode("utf-8")
+            self.assertEqual(decoded, resp, "Decoded text must match original response with 100% fidelity")
+
+            # Verify no unescaped dangerous newlines in HTML string
+            self.assertNotIn("\n", html_btn)
+
+        # Verify COPY_INJECTOR exists and attaches to parent document
+        from app import COPY_INJECTOR
+        self.assertIn("__krishnaCopyAttached", COPY_INJECTOR)
+        self.assertIn("parentDoc.addEventListener", COPY_INJECTOR)
+
+    def test_smart_titling_and_greetings_isolation(self):
+        """
+        Verify that:
+        1. Greetings and small talk do NOT become permanent conversation titles.
+        2. Substantive messages produce clean 3-5 word titles.
+        3. Fallback title generator cleans filler prefixes.
+        4. Duplicate titles are safely handled with incremental suffixes.
+        5. Placeholder and greeting titles are correctly detected for in-place upgrading.
+        """
+        from app import (
+            is_greeting_or_small_talk,
+            is_placeholder_or_greeting_title,
+            generate_fallback_title,
+            generate_smart_title,
+            ensure_unique_title
+        )
+
+        # 1. Greetings must be recognized
+        greetings = [
+            "hi", "hi!", "hello", "Hello Krishna", "Namaskar", "Namaste",
+            "Radhe Radhe", "hey there", "how are you", "how are you doing",
+            "pranam", "sup", "yo"
+        ]
+        for g in greetings:
+            self.assertTrue(is_greeting_or_small_talk(g), f"Expected '{g}' to be classified as greeting")
+
+        # 2. Substantive messages must NOT be greetings
+        substantive = [
+            "Help me make a difficult decision",
+            "Explain this concept clearly",
+            "I feel stuck. Help me think through it.",
+            "What does the Gita say about finding life purpose?",
+            "How do I manage severe anxiety before important exams?",
+            "Can you explain chapter 2 verse 47 regarding karma yoga?"
+        ]
+        for s in substantive:
+            self.assertFalse(is_greeting_or_small_talk(s), f"Expected '{s}' to be substantive")
+
+        # 3. Fallback title generation must be clean 3-5 words
+        t1 = generate_fallback_title("Help me make a difficult decision")
+        self.assertEqual(t1, "Making a Difficult Decision")
+
+        t2 = generate_fallback_title("Explain this concept clearly")
+        self.assertEqual(t2, "Concept Clarity & Understanding")
+
+        t3 = generate_fallback_title("I feel stuck. Help me think through it.")
+        self.assertEqual(t3, "Navigating Feeling Stuck")
+
+        t4 = generate_fallback_title("What does the Gita say about karma yoga and selfless action?")
+        self.assertTrue(2 <= len(t4.split()) <= 6, f"Title '{t4}' should be 3-5 words")
+        self.assertNotIn("what does the gita say about", t4.lower())
+
+        # 4. Duplicate title handling
+        fake_chats = {
+            "Making A Difficult Decision": [],
+            "Making A Difficult Decision (1)": []
+        }
+        unique = ensure_unique_title("Making A Difficult Decision", fake_chats)
+        self.assertEqual(unique, "Making A Difficult Decision (2)")
+
+        # Unique with current_key (upgrading in-place)
+        upgraded = ensure_unique_title("New Conversation", {"New Conversation": []}, current_key="New Conversation")
+        self.assertEqual(upgraded, "New Conversation")
+
+        # 5. Placeholder / greeting title detection for upgrades
+        self.assertTrue(is_placeholder_or_greeting_title("New Conversation"))
+        self.assertTrue(is_placeholder_or_greeting_title("New Conversation (1)"))
+        self.assertTrue(is_placeholder_or_greeting_title("New Chat"))
+        self.assertTrue(is_placeholder_or_greeting_title("hi"))
+        self.assertTrue(is_placeholder_or_greeting_title("hi (1)"))
+        self.assertTrue(is_placeholder_or_greeting_title("Namaskar"))
+        self.assertTrue(is_placeholder_or_greeting_title("Hello Krishna"))
+        self.assertFalse(is_placeholder_or_greeting_title("Making a Difficult Decision"))
+        self.assertFalse(is_placeholder_or_greeting_title("Career Guidance & Duty"))
+
+    def test_clickable_suggestion_starters_in_codebase(self):
+        """
+        Verify that suggestion starters are real clickable st.button components
+        and wired into user_msg flow.
+        """
+        with open("app.py", "r", encoding="utf-8") as f:
+            code = f.read()
+
+        # Starters must be st.button
+        self.assertIn('st.button("Help me make a difficult decision"', code)
+        self.assertIn('st.button("Explain this concept clearly"', code)
+        self.assertIn('st.button("I feel stuck. Help me think through it."', code)
+
+        # Must be wired into user_msg via pending_starter
+        self.assertIn("user_msg = input_msg or pending_starter", code)
+
 
 class TestKrishnaAIConcurrencyAndScale(unittest.TestCase):
     """
